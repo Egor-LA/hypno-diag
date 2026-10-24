@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow, noarchive">
+<meta name="color-scheme" content="light dark">
+<title>Карта клиента</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap&subset=cyrillic" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root {
+  --bg: #faf8f5; --card: #ffffff; --text: #1f2430; --hint: #6b7280; --accent: #3d6b5e; --accent-text: #fff;
+  --border: #e6e1d8; --track: #e4dfd5; --red: #c0392b; --amber: #c98a1b; --green: #3d8a5f; --soft: #eef3f0;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #14171c; --card: #1d2128; --text: #eceae4; --hint: #9aa1ad; --accent: #7fb5a3; --accent-text: #10201b;
+    --border: #2d333c; --track: #333a44; --red: #ef7b6c; --amber: #e3b25a; --green: #6fc193; --soft: #1a2420; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 400 16px/1.45 'Manrope', system-ui, -apple-system, 'Segoe UI', sans-serif; }
+main { max-width: 760px; margin: 0 auto; padding: 16px 16px 60px; }
+h1 { font-size: 26px; margin: 8px 0 4px; line-height: 1.2; }
+h2 { font-size: 18px; margin: 28px 0 10px; }
+h3 { font-size: 15px; margin: 16px 0 6px; }
+.hint { color: var(--hint); font-size: 14px; }
+.meta { display: flex; flex-wrap: wrap; gap: 4px 16px; color: var(--hint); font-size: 14px; }
+.card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 14px 16px; margin-bottom: 12px; }
+.flag { border-radius: 14px; padding: 12px 14px; margin: 14px 0; font-weight: 600; border: 2px solid var(--border); background: var(--card); }
+.flag.red { border-color: var(--red); color: var(--red); }
+.flag.yellow { border-color: var(--amber); color: var(--amber); }
+.flag.none { border-color: var(--green); color: var(--green); }
+.flag small { display: block; font-weight: 500; color: var(--hint); }
+.main-block { border: 2px solid var(--accent); background: var(--soft); }
+.main-block .big { font-size: 18px; font-weight: 600; margin: 2px 0 8px; }
+.score { display: inline-block; background: var(--accent); color: var(--accent-text); border-radius: 10px; padding: 2px 10px; font-weight: 700; margin-left: 6px; }
+.lbl { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--hint); margin-top: 10px; }
+ul.pts { list-style: none; margin: 0; padding: 0; }
+ul.pts li { padding: 8px 0; border-top: 1px solid var(--border); display: flex; justify-content: space-between; gap: 12px; }
+ul.pts li:first-child { border-top: 0; }
+.tag { font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 8px; background: var(--red); color: #fff; margin-left: 6px; white-space: nowrap; }
+html[data-dark] .tag, .tag { color: #fff; }
+.num { font-weight: 700; white-space: nowrap; }
+.pair { padding: 8px 0; border-top: 1px solid var(--border); }
+.pair:first-child { border-top: 0; }
+.dom { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; margin-bottom: 12px; }
+.dom .bar { grid-column: 1 / -1; height: 12px; background: var(--track); border-radius: 6px; overflow: hidden; }
+.dom .bar i { display: block; height: 100%; border-radius: 6px; }
+.dom .pr { color: var(--hint); font-size: 13px; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th, td { text-align: left; padding: 8px 6px; border-top: 1px solid var(--border); vertical-align: top; }
+th { color: var(--hint); font-weight: 600; font-size: 12px; }
+td.n, th.n { text-align: right; white-space: nowrap; }
+.better { color: var(--green); font-weight: 700; }
+.worse { color: var(--red); font-weight: 700; }
+details { margin-bottom: 12px; }
+summary { cursor: pointer; font-weight: 700; padding: 12px 0; font-size: 18px; }
+.scroll { overflow-x: auto; }
+button.dl { display: block; width: 100%; min-height: 52px; border: 0; border-radius: 14px; background: var(--accent); color: var(--accent-text); font: 700 16px 'Manrope', sans-serif; margin-top: 24px; cursor: pointer; }
+.chart { position: relative; height: 260px; }
+.denied { text-align: center; padding: 80px 16px; }
+</style>
+</head>
+<body>
+<main id="root"><p class="hint">Загрузка...</p></main>
+<script type="module">
+import {
+  BLOCKS, QUESTIONS, CRITICAL_INDEX, SCHEDULES, analyze, describe, normalizeAnswers, buildMarkdown, fmtDate, fmtDateTime, fmtNum, arrow, round1,
+} from './shared.js';
+import { API } from './config.js';
+
+const root = document.getElementById('root');
+const params = new URLSearchParams(location.search);
+const isLocal = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
+const api = isLocal && params.get('api') ? params.get('api') : API;
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const colorFor = (m) => (m >= 7 ? '--red' : m >= 4 ? '--amber' : '--green');
+
+let data = null;
+let chart = null;
+
+function denied() {
+  root.innerHTML = '<div class="denied"><h1>Нет доступа</h1><p class="hint">Ссылка неверна или устарела. Откройте карту из кнопки в чате с ботом.</p></div>';
+}
+
+async function load() {
+  const id = params.get('id');
+  const k = params.get('k');
+  if (!id || !k) return denied();
+  try {
+    const r = await fetch(`${api}/api/report?id=${encodeURIComponent(id)}&k=${encodeURIComponent(k)}`);
+    if (!r.ok) return denied();
+    const j = await r.json();
+    if (!j.ok) return denied();
+    data = { client: j.client, subs: j.submissions.map((s) => ({ ...s, answers: normalizeAnswers(typeof s.answers === 'string' ? JSON.parse(s.answers) : s.answers) })) };
+  } catch {
+    root.innerHTML = '<div class="denied"><h1>Нет связи</h1><p class="hint">Не удалось загрузить данные. Обновите страницу.</p></div>';
+    return;
+  }
+  render();
+}
+
+function render() {
+  const { client, subs } = data;
+  const tz = client.tz || 'Europe/Moscow';
+  const fulls = subs.filter((s) => s.kind === 'full');
+  const shorts = subs.filter((s) => s.kind === 'short');
+  const lastFull = fulls[fulls.length - 1];
+  const last = subs[subs.length - 1];
+  let h = '';
+
+  // 1. Шапка
+  h += `<h1>${esc(client.name)}</h1><div class="meta">`;
+  if (client.contact) h += `<span>Контакт: ${esc(client.contact)}</span>`;
+  if (subs.length) h += `<span>Первое прохождение: ${fmtDate(subs[0].created_at, tz)}</span><span>Последнее: ${fmtDate(last.created_at, tz)}</span>`;
+  h += `<span>Ретест: ${esc(SCHEDULES[client.schedule] || SCHEDULES.off)}</span>`;
+  if (client.next_at) h += `<span>Следующий: ${fmtDateTime(client.next_at, tz)} (${client.next_kind === 'full' ? 'полный' : 'короткий'})</span>`;
+  h += '</div>';
+
+  if (!subs.length) { root.innerHTML = h + '<p class="hint">Прохождений пока нет.</p>'; return; }
+
+  // 2. Безопасность
+  const critVals = subs.map((s) => s.answers[CRITICAL_INDEX]).filter((v) => v != null);
+  if (critVals.length) {
+    const lastVal = [...subs].reverse().map((s) => s.answers[CRITICAL_INDEX]).find((v) => v != null);
+    const max = Math.max(...critVals);
+    const level = (v) => (v >= 3 ? 'red' : v >= 1 ? 'yellow' : 'none');
+    const lv = level(Math.max(lastVal, 0));
+    const text = lv === 'red' ? 'Проверить в первую очередь' : lv === 'yellow' ? 'Обратить внимание' : 'Без флага';
+    h += `<div class="flag ${lv}">Мысли «лучше бы меня не было»: сейчас ${lastVal}/10, максимум за всё время ${max}/10<small>${text}</small></div>`;
+  }
+
+  // 3. Главное для клиента
+  if (lastFull) {
+    const curScore = [...subs].reverse().find((s) => s.concern_score != null)?.concern_score;
+    h += `<h2>Главное для клиента</h2><div class="card main-block">
+      <div class="lbl">Беспокоит больше всего</div>
+      <div class="big">${esc(lastFull.concern_text)} <span class="score">${curScore ?? '-'}/10</span></div>
+      <div class="lbl">Как поймёт, что это ушло</div>
+      <div class="big">${esc(lastFull.success_text)}</div>
+      ${lastFull.other_text ? `<div class="lbl">Что ещё беспокоит</div><div>${esc(lastFull.other_text)}</div>` : ''}
+    </div>`;
+
+    // 4. Точки входа
+    const a = analyze(lastFull.answers);
+    h += `<h2>Точки входа</h2><p class="hint">По последнему полному прохождению, ${fmtDate(lastFull.created_at, tz)}. Сумма ${fmtNum(a.total)}/100 (${a.totalLabel}), только для терапевта.</p>`;
+    if (a.entry.outliers.length) {
+      h += `<div class="card"><h3 style="margin-top:0">Сильнее всего отличается от обычного себя</h3><ul class="pts">`;
+      a.entry.outliers.forEach((o) => {
+        h += `<li><span>${esc(QUESTIONS[o.idx].text)}<br><span class="hint">${esc(BLOCKS[o.block].title)}, среднее по сфере ${fmtNum(o.domainMean)}</span></span><span class="num">${o.value}<span class="tag">Выброс</span></span></li>`;
+      });
+      h += '</ul></div>';
+    }
+    if (a.entry.rest.length) {
+      h += `<div class="card"><h3 style="margin-top:0">Другие пункты 5 и выше</h3><ul class="pts">`;
+      a.entry.rest.forEach((r) => { h += `<li><span>${esc(QUESTIONS[r.idx].text)}<br><span class="hint">${esc(BLOCKS[r.block].title)}</span></span><span class="num">${r.value}</span></li>`; });
+      h += '</ul></div>';
+    }
+    if (a.contradictions.length) {
+      h += `<div class="card"><h3 style="margin-top:0">Противоречия</h3>`;
+      a.contradictions.forEach((c) => {
+        h += `<div class="pair"><span class="hint">${esc(BLOCKS[c.block].title)}</span><br>${esc(QUESTIONS[c.low.idx].label)}: <b>${c.low.value}</b>, но ${esc(QUESTIONS[c.high.idx].label)}: <b>${c.high.value}</b></div>`;
+      });
+      h += '</div>';
+    }
+    if (!a.entry.outliers.length && !a.entry.rest.length) h += '<div class="card hint">Пунктов с оценкой 5 и выше нет.</div>';
+
+    // 5. Профиль по сферам
+    h += `<h2>Профиль по сферам</h2><div class="card">`;
+    a.priorities.forEach((p) => {
+      h += `<div class="dom"><span>${esc(p.title)}</span><span class="num">${fmtNum(p.mean)}</span><div class="bar"><i style="width:${p.mean * 10}%;background:var(${colorFor(p.mean)})"></i></div><span class="pr">${p.priority}</span></div>`;
+    });
+    h += '</div>';
+  }
+
+  // 6. Динамика
+  if (subs.length > 1) {
+    h += `<h2>Динамика</h2><div class="card"><div class="chart"><canvas id="ch"></canvas></div></div>`;
+    if (fulls.length > 1) {
+      const d = describe(subs, subs.indexOf(lastFull));
+      h += `<div class="card scroll"><table><tr><th>Сфера</th><th class="n">Первое</th><th class="n">Сейчас</th><th class="n">С начала</th><th class="n">К пред.</th></tr>`;
+      d.domains.forEach((m) => {
+        const cls = (x) => (x == null || x === 0 ? '' : x < 0 ? 'better' : 'worse');
+        h += `<tr><td>${esc(m.title)}</td><td class="n">${fmtNum(m.first)}</td><td class="n">${fmtNum(m.mean)}</td><td class="n ${cls(m.deltaFirst)}">${arrow(m.deltaFirst)}</td><td class="n ${cls(m.delta)}">${arrow(m.delta)}</td></tr>`;
+      });
+      h += `<tr><td><b>Сумма</b></td><td class="n">${fmtNum(d.totalFirst)}</td><td class="n"><b>${fmtNum(d.total)}</b></td><td class="n">${d.totalFirst != null ? arrow(round1(d.total - d.totalFirst)) : ''}</td><td class="n">${d.totalPrev != null ? arrow(round1(d.total - d.totalPrev)) : ''}</td></tr>`;
+      h += '</table><p class="hint" style="margin:8px 0 0">Стрелка вниз: стало легче.</p></div>';
+    }
+    const notes = shorts.filter((s) => s.week_note);
+    h += '<div class="card"><h3 style="margin-top:0">Что изменилось за неделю</h3>';
+    if (notes.length) notes.forEach((s) => { h += `<div class="pair"><span class="hint">${fmtDate(s.created_at, tz)}, беспокойство ${s.concern_score}/10</span><br>${esc(s.week_note)}</div>`; });
+    else h += '<span class="hint">Записей из коротких ретестов пока нет.</span>';
+    h += '</div>';
+  }
+
+  // 7. Все ответы
+  if (fulls.length) {
+    h += `<details><summary>Все ответы</summary><div class="card scroll"><table><tr><th>№</th><th>Вопрос</th>${fulls.map((s) => `<th class="n">${fmtDate(s.created_at, tz)}</th>`).join('')}</tr>`;
+    BLOCKS.forEach((b, bi) => {
+      h += `<tr><td colspan="${2 + fulls.length}"><b>${esc(b.title)}</b></td></tr>`;
+      QUESTIONS.filter((q) => q.block === bi).forEach((q) => {
+        h += `<tr><td>${q.idx + 1}</td><td>${esc(q.text)}</td>${fulls.map((s) => `<td class="n">${s.answers[q.idx] ?? '-'}</td>`).join('')}</tr>`;
+      });
+    });
+    h += '</table></div></details>';
+  }
+
+  // 8. Файл для ИИ
+  h += '<button class="dl" id="dl">Скачать файл для ИИ</button>';
+  root.innerHTML = h;
+  document.getElementById('dl').addEventListener('click', downloadMd);
+  if (subs.length > 1) drawChart();
+}
+
+function drawChart() {
+  const { client, subs } = data;
+  const tz = client.tz || 'Europe/Moscow';
+  if (!window.Chart) { document.getElementById('ch').parentElement.innerHTML = '<p class="hint">График не загрузился (нет доступа к cdnjs).</p>'; return; }
+  if (chart) chart.destroy();
+  const labels = subs.map((s) => fmtDate(s.created_at, tz));
+  const total = subs.map((s) => (s.kind === 'full' ? analyze(s.answers).total : null));
+  const concern = subs.map((s) => s.concern_score);
+  const text = css('--text');
+  const grid = css('--border');
+  chart = new Chart(document.getElementById('ch'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Главное беспокойство (0-10)', data: concern, borderColor: css('--red'), backgroundColor: css('--red'), yAxisID: 'y', tension: 0.2, spanGaps: true, pointRadius: 4 },
+        { label: 'Сумма (из 100)', data: total, borderColor: css('--accent'), backgroundColor: css('--accent'), yAxisID: 'y1', tension: 0.2, spanGaps: true, pointRadius: 4 },
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: text, boxWidth: 12 } } },
+      scales: {
+        x: { ticks: { color: text }, grid: { color: grid } },
+        y: { min: 0, max: 10, position: 'left', ticks: { color: text, stepSize: 2 }, grid: { color: grid } },
+        y1: { min: 0, max: 100, position: 'right', ticks: { color: text }, grid: { drawOnChartArea: false } },
+      },
+    },
+  });
+}
+
+function downloadMd() {
+  const { filename, text } = buildMarkdown(data.client, data.subs);
+  const blob = new Blob([text], { type: 'text/markdown;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+}
+
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { if (data && data.subs.length > 1) drawChart(); });
+load();
+</script>
+</body>
+</html>

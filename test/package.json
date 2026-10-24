@@ -1,0 +1,1 @@
+{"name":"hypno-diag-tests","private":true,"type":"module","devDependencies":{"@electric-sql/pglite":"^0.5.11","playwright":"^1.49.0"}}

@@ -1,0 +1,13 @@
+{
+  "name": "hypno-diag",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "esbuild supabase/entry.js --bundle --format=esm --platform=neutral --charset=utf8 --external:npm:postgres@3.4.5 --loader:.sql=text --outfile=supabase/functions/diag/index.js",
+    "test:local": "node test/e2e.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "supabase": "^2.122.0"
+  }
+}

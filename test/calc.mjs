@@ -1,0 +1,11 @@
+import * as S from '../web/shared.js';
+const A=[2,5,5,2,0,0, 0,0,4,0,0,0, 0,2,0,0,0, 3,4,4,0,2,0, 5,0,2,4,5, 0,5,5,2,2, 5,4,8,3,4,1, 0,2,3,0,0, 0,0,0,0,0, 0,0,0,0,0,0];
+console.log(A.length);
+const a=S.analyze(A);
+console.log('total',a.total,a.totalLabel);
+console.log(a.means.map(m=>m.mean).join());
+console.log('outliers',a.outliers.map(o=>S.QUESTIONS[o.idx].label+' '+o.value+' / '+o.domainMean));
+console.log('rest',a.entry.rest.map(o=>S.QUESTIONS[o.idx].label+' '+o.value));
+console.log('contr',a.contradictions.filter(c=>c.block===5).map(c=>S.QUESTIONS[c.low.idx].label+' '+c.low.value+' / '+S.QUESTIONS[c.high.idx].label+' '+c.high.value));
+console.log('crit',a.critical, S.clientSafetyTriggered(A));
+console.log('short',S.shortItems(A));

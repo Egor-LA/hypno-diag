@@ -1,0 +1,577 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="color-scheme" content="light dark">
+<title>Опросник состояния</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap&subset=cyrillic" rel="stylesheet">
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+:root {
+  --bg: #faf8f5; --card: #ffffff; --text: #1f2430; --hint: #6b7280; --accent: #3d6b5e; --accent-text: #ffffff;
+  --border: #e6e1d8; --track: #dcd6cb; --warn: #b4432f; --soft: #eef3f0;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #14171c; --card: #1d2128; --text: #eceae4; --hint: #9aa1ad; --accent: #7fb5a3; --accent-text: #10201b;
+    --border: #2d333c; --track: #3a414c; --warn: #e48a76; --soft: #1a2420; }
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font: 400 16px/1.45 'Manrope', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+#app { max-width: 640px; margin: 0 auto; padding: 0 16px 120px; }
+h1 { font-size: 24px; line-height: 1.2; margin: 28px 0 14px; font-weight: 700; }
+p { margin: 0 0 14px; }
+.hint { color: var(--hint); font-size: 14px; }
+.card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 16px; margin-bottom: 14px; }
+label.field { display: block; font-weight: 600; font-size: 14px; margin-bottom: 14px; }
+label.field input, label.field textarea, textarea.free {
+  display: block; width: 100%; margin-top: 6px; font: inherit; color: var(--text); background: var(--bg);
+  border: 1px solid var(--border); border-radius: 12px; padding: 12px; min-height: 48px;
+}
+textarea { resize: vertical; min-height: 96px !important; }
+.check { display: flex; gap: 12px; align-items: flex-start; font-size: 15px; margin: 6px 0 18px; }
+.check input { width: 24px; height: 24px; flex: none; margin: 0; accent-color: var(--accent); }
+button { font: inherit; cursor: pointer; }
+.primary, .secondary {
+  display: block; width: 100%; min-height: 52px; border-radius: 14px; border: 0; font-weight: 700; font-size: 16px; padding: 12px 16px;
+}
+.primary { background: var(--accent); color: var(--accent-text); }
+.primary:disabled, .primary.inactive { opacity: .45; }
+.secondary { background: transparent; color: var(--text); border: 1px solid var(--border); margin-top: 10px; }
+a.secondary { text-align: center; text-decoration: none; }
+
+.sticky {
+  position: sticky; top: 0; z-index: 10; margin: 0 -16px 12px; padding: 10px 16px 8px; background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+.sticky .row { display: flex; justify-content: space-between; font-size: 14px; font-weight: 600; }
+.bar { height: 6px; border-radius: 3px; background: var(--track); margin-top: 6px; overflow: hidden; }
+.bar > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .25s; }
+
+.blk { background: var(--card); border: 1px solid var(--border); border-radius: 16px; margin-bottom: 12px; scroll-margin-top: 64px; overflow: hidden; }
+.bh { display: flex; width: 100%; justify-content: space-between; align-items: center; gap: 10px; text-align: left; background: none; border: 0; color: var(--text);
+  padding: 16px; font-weight: 700; font-size: 16px; min-height: 56px; }
+.bh .cnt { color: var(--hint); font-weight: 600; font-size: 14px; white-space: nowrap; }
+.blk.done .cnt { color: var(--accent); }
+.bb { display: none; padding: 0 16px 8px; }
+.blk.open .bb { display: block; }
+.blk.open .bh { padding-bottom: 8px; }
+
+.q { padding: 14px 0 12px; border-top: 1px solid var(--border); scroll-margin-top: 70px; border-radius: 8px; }
+.q:first-child { border-top: 0; }
+.qhead { display: flex; gap: 12px; justify-content: space-between; align-items: flex-start; }
+.qtext { font-weight: 600; font-size: 16px; }
+.val { min-width: 40px; text-align: center; font-weight: 700; font-size: 20px; color: var(--accent); flex: none; }
+.q.untouched .val { color: var(--hint); }
+.note { color: var(--hint); font-size: 13px; margin-top: 6px; }
+.ticks { display: flex; justify-content: space-between; color: var(--hint); font-size: 12px; padding: 0 6px; }
+
+input[type=range].slider {
+  -webkit-appearance: none; appearance: none; width: 100%; height: 48px; margin: 4px 0 0; background: transparent; touch-action: pan-y; --p: 0%;
+}
+.q.untouched .slider { opacity: .45; }
+.slider::-webkit-slider-runnable-track { height: 14px; border-radius: 7px; background: linear-gradient(to right, var(--accent) var(--p), var(--track) var(--p)); }
+.slider::-moz-range-track { height: 14px; border-radius: 7px; background: var(--track); }
+.slider::-moz-range-progress { height: 14px; border-radius: 7px; background: var(--accent); }
+.slider::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 38px; height: 38px; margin-top: -12px; border-radius: 50%; background: var(--accent);
+  border: 4px solid var(--card); box-shadow: 0 1px 6px rgba(0,0,0,.35);
+}
+.slider::-moz-range-thumb { width: 30px; height: 30px; border-radius: 50%; background: var(--accent); border: 4px solid var(--card); box-shadow: 0 1px 6px rgba(0,0,0,.35); }
+.slider:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 8px; }
+
+@keyframes flash { 0%, 100% { background: transparent; } 25%, 75% { background: color-mix(in srgb, var(--warn) 22%, transparent); } }
+.flash { animation: flash 1.4s ease; }
+.req { color: var(--warn); }
+
+.notice { background: var(--soft); border: 1px solid var(--border); border-radius: 14px; padding: 14px; margin-bottom: 14px; }
+.safety { border-color: var(--warn); }
+.center { text-align: center; padding-top: 40px; }
+.spinner { width: 34px; height: 34px; border: 4px solid var(--track); border-top-color: var(--accent); border-radius: 50%; margin: 40px auto; animation: sp 1s linear infinite; }
+@keyframes sp { to { transform: rotate(360deg); } }
+.tg .foot { display: none; }
+.hidden { display: none !important; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } .flash { animation: none; } }
+</style>
+</head>
+<body>
+<div id="app"><div class="spinner" aria-label="Загрузка"></div></div>
+
+<script type="module">
+import { BLOCKS, QUESTIONS, CONCERN_QUESTIONS, SAFETY_TEXT } from './shared.js';
+import { API, BOT, THERAPIST } from './config.js';
+
+const tg = window.Telegram && window.Telegram.WebApp;
+const inTg = !!(tg && tg.initData);
+const params = new URLSearchParams(location.search);
+const isLocal = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
+const api = isLocal && params.get('api') ? params.get('api') : API;
+const app = document.getElementById('app');
+const N = QUESTIONS.length;
+
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const $ = (sel, root = document) => root.querySelector(sel);
+
+// ---------- состояние ----------
+const S = {
+  kind: 'full', name: '', contact: '', consent: false, items: null, concernLabel: '',
+  answers: new Array(N).fill(null),
+  concernText: '', concernScore: null, successText: '', otherText: '', weekNote: '',
+  firstTime: true, tgName: '',
+};
+let storeKey = 'diag:v1:web:full';
+let groups = [];
+let qEls = {};
+let quizBuilt = false;
+let sending = false;
+let lastResult = null;
+
+const tz = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'Europe/Moscow'; } catch { return 'Europe/Moscow'; } })();
+
+function store(save) {
+  try {
+    if (save === null) localStorage.removeItem(storeKey);
+    else if (save) localStorage.setItem(storeKey, JSON.stringify(save));
+    else return JSON.parse(localStorage.getItem(storeKey) || 'null');
+  } catch { /* localStorage может быть недоступен */ }
+  return null;
+}
+let finished = false;
+function persist() {
+  if (finished) return;
+  store({
+    answers: S.answers, concernText: S.concernText, concernScore: S.concernScore, successText: S.successText,
+    otherText: S.otherText, weekNote: S.weekNote, name: S.name, contact: S.contact, consent: S.consent, ts: Date.now(),
+  });
+}
+function hasProgress(d) {
+  return d && (d.answers.some((v) => v != null) || d.concernText || d.successText || d.otherText || d.weekNote || d.concernScore != null);
+}
+
+// ---------- тема Telegram ----------
+function applyTheme() {
+  if (!inTg) return;
+  const t = tg.themeParams || {};
+  const r = document.documentElement.style;
+  const set = (k, v) => { if (v) r.setProperty(k, v); };
+  set('--bg', t.secondary_bg_color || t.bg_color);
+  set('--card', t.bg_color);
+  set('--text', t.text_color);
+  set('--hint', t.hint_color);
+  set('--accent', t.button_color);
+  set('--accent-text', t.button_text_color);
+  set('--border', t.section_separator_color || (t.hint_color ? t.hint_color + '44' : ''));
+  set('--track', t.hint_color ? t.hint_color + '55' : '');
+  set('--soft', t.secondary_bg_color);
+  set('--warn', t.destructive_text_color);
+}
+if (inTg) {
+  document.body.classList.add('tg');
+  try { tg.ready(); tg.expand(); applyTheme(); tg.onEvent('themeChanged', applyTheme); } catch { /* ok */ }
+}
+
+// ---------- сеть ----------
+async function post(path, body) {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), 25000);
+  try {
+    const r = await fetch(api + path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), signal: ctl.signal });
+    const j = await r.json().catch(() => ({}));
+    return { status: r.status, ...j };
+  } finally { clearTimeout(timer); }
+}
+
+// ---------- экраны ----------
+function show(html) { app.innerHTML = html; window.scrollTo(0, 0); }
+
+function fatal(title, text) {
+  hideMain();
+  show(`<h1>Опросник состояния</h1><div class="card"><p><b>${esc(title)}</b></p><p class="hint">${esc(text)}</p></div>`);
+}
+
+function introText() {
+  return 'Оцените каждый пункт от 0 до 10. 0 значит «этого нет, как в мой лучший период». 10 значит «выражено максимально прямо сейчас». Ориентируйтесь на последние 2 недели. Правильных ответов нет, важен только ваш опыт. Займёт '
+    + (S.kind === 'short' ? '2-3 минуты.' : '10-15 минут.');
+}
+
+function startScreen() {
+  const saved = store();
+  const needName = !inTg;
+  const needConsent = !inTg || S.firstTime;
+  show(`
+    <h1>Опросник состояния</h1>
+    ${inTg && S.tgName ? `<p>Здравствуйте, ${esc(S.tgName)}.</p>` : ''}
+    <div class="card"><p style="margin:0">${esc(introText())}</p></div>
+    ${needName ? `
+      <label class="field">Имя <span class="req">*</span><input id="name" autocomplete="name" maxlength="100" value="${esc(S.name)}"></label>
+      <label class="field">Контакт <span class="hint">(необязательно, телефон или Telegram)</span><input id="contact" autocomplete="off" maxlength="200" value="${esc(S.contact)}"></label>` : ''}
+    ${needConsent ? `<label class="check"><input type="checkbox" id="consent" ${S.consent ? 'checked' : ''}><span>Я согласен(на), что ответы увидит мой терапевт</span></label>` : ''}
+    <div id="resume" class="notice ${hasProgress(saved) ? '' : 'hidden'}">
+      <p><b>Продолжить с места, где остановились?</b></p>
+      <button class="primary" id="btnResume">Продолжить</button>
+      <button class="secondary" id="btnFresh">Начать заново</button>
+    </div>
+    <button class="primary" id="btnStart">Начать</button>
+  `);
+  const check = () => {
+    const ok = (!needName || S.name.trim()) && (!needConsent || S.consent);
+    $('#btnStart').disabled = !ok;
+    if (inTg) { tg.MainButton.setText('Начать'); tg.MainButton.show(); ok ? tg.MainButton.enable() : tg.MainButton.disable(); }
+  };
+  if (needName) {
+    $('#name').addEventListener('input', (e) => { S.name = e.target.value; check(); });
+    $('#contact').addEventListener('input', (e) => { S.contact = e.target.value; });
+  }
+  if (needConsent) $('#consent').addEventListener('change', (e) => { S.consent = e.target.checked; check(); });
+  const begin = () => { if (!$('#btnStart').disabled) openQuiz(); };
+  $('#btnStart').addEventListener('click', begin);
+  if (inTg) { tg.MainButton.offClick(onPrimary); tg.MainButton.offClick(begin); tg.MainButton.onClick(begin); startHandler = begin; }
+  $('#btnResume')?.addEventListener('click', () => {
+    Object.assign(S, { answers: saved.answers, concernText: saved.concernText || '', concernScore: saved.concernScore ?? null, successText: saved.successText || '',
+      otherText: saved.otherText || '', weekNote: saved.weekNote || '' });
+    if (!inTg) { S.name = saved.name || S.name; S.contact = saved.contact || S.contact; }
+    S.consent = saved.consent || S.consent;
+    $('#resume').classList.add('hidden');
+    const nm = $('#name'); if (nm) nm.value = S.name;
+    const ct = $('#contact'); if (ct) ct.value = S.contact;
+    const cs = $('#consent'); if (cs) cs.checked = S.consent;
+    check();
+    resumed = true;
+  });
+  $('#btnFresh')?.addEventListener('click', () => { store(null); $('#resume').classList.add('hidden'); });
+  check();
+}
+let startHandler = null;
+let resumed = false;
+
+// ---------- опросник ----------
+function buildGroups() {
+  groups = [];
+  if (S.kind === 'short') groups.push({ id: 'items', title: 'Ваши пункты', idxs: S.items.slice() });
+  else BLOCKS.forEach((b, bi) => groups.push({ id: b.id, title: b.title, idxs: QUESTIONS.filter((q) => q.block === bi).map((q) => q.idx) }));
+  groups.push({ id: 'main', title: S.kind === 'short' ? 'Главное' : 'Главное для вас', idxs: [], main: true });
+}
+
+const requiredIdxs = () => groups.filter((g) => !g.main).flatMap((g) => g.idxs);
+const answeredCount = () => requiredIdxs().filter((i) => S.answers[i] != null).length;
+
+function mainMissing() {
+  const m = [];
+  if (S.kind === 'full') {
+    if (!S.concernText.trim()) m.push('concernText');
+    if (S.concernScore == null) m.push('concernScore');
+    if (!S.successText.trim()) m.push('successText');
+  } else if (S.concernScore == null) m.push('concernScore');
+  return m;
+}
+const groupDone = (g) => (g.main ? mainMissing().length === 0 : g.idxs.every((i) => S.answers[i] != null));
+const isComplete = () => groups.every(groupDone);
+
+function sliderHtml(id, value, touched) {
+  return `<input type="range" class="slider" id="${id}" min="0" max="10" step="1" value="${value ?? 0}" style="--p:${((value ?? 0) / 10) * 100}%" aria-label="Оценка от 0 до 10">`;
+}
+
+function questionHtml(q, idx) {
+  const v = S.answers[idx];
+  return `<div class="q ${v == null ? 'untouched' : ''}" data-i="${idx}">
+    <div class="qhead"><div class="qtext">${esc(q.text)}</div><div class="val">${v == null ? '–' : v}</div></div>
+    <div class="note">${esc(q.note)}</div>
+    ${sliderHtml('s' + idx, v)}
+    <div class="ticks"><span>0</span><span>10</span></div>
+  </div>`;
+}
+
+function concernBlockHtml() {
+  const C = CONCERN_QUESTIONS;
+  const v = S.concernScore;
+  const scoreQ = S.kind === 'short'
+    ? `Насколько сильно сейчас беспокоит «${S.concernLabel}»?`
+    : C.concernScore;
+  const slider = `<div class="q ${v == null ? 'untouched' : ''}" data-c="concernScore">
+      <div class="qhead"><div class="qtext">${esc(scoreQ)}${S.kind === 'full' ? '' : ''} <span class="req">*</span></div><div class="val">${v == null ? '–' : v}</div></div>
+      ${sliderHtml('sc', v)}
+      <div class="ticks"><span>0</span><span>10</span></div></div>`;
+  if (S.kind === 'short') {
+    return `${slider}
+      <div class="q" data-c="weekNote"><label class="qtext" for="weekNote">Что изменилось за эту неделю? <span class="hint">(необязательно)</span></label>
+        <textarea class="free" id="weekNote" maxlength="3000">${esc(S.weekNote)}</textarea></div>`;
+  }
+  return `
+    <div class="q" data-c="concernText"><label class="qtext" for="concernText">${esc(C.concernText)} <span class="req">*</span></label>
+      <textarea class="free" id="concernText" maxlength="3000">${esc(S.concernText)}</textarea></div>
+    ${slider}
+    <div class="q" data-c="successText"><label class="qtext" for="successText">${esc(C.successText)} <span class="req">*</span></label>
+      <textarea class="free" id="successText" maxlength="3000">${esc(S.successText)}</textarea></div>
+    <div class="q" data-c="otherText"><label class="qtext" for="otherText">${esc(C.otherText)} <span class="hint">(необязательно)</span></label>
+      <textarea class="free" id="otherText" maxlength="3000">${esc(S.otherText)}</textarea></div>`;
+}
+
+function openQuiz() {
+  if (inTg) { tg.MainButton.offClick(startHandler); tg.MainButton.onClick(onPrimary); }
+  buildGroups();
+  const total = requiredIdxs().length;
+  show(`
+    <div class="sticky"><div class="row"><span id="pcount"></span><span class="hint" id="pname"></span></div><div class="bar"><i id="pbar"></i></div></div>
+    <div id="blocks"></div>
+    <div class="foot"><button class="primary inactive" id="btnSubmit">Отправить</button></div>
+  `);
+  const wrap = $('#blocks');
+  groups.forEach((g, gi) => {
+    const sec = document.createElement('section');
+    sec.className = 'blk';
+    sec.dataset.g = gi;
+    const body = g.main ? concernBlockHtml() : g.idxs.map((i) => questionHtml(QUESTIONS[i], i)).join('');
+    sec.innerHTML = `<button class="bh" type="button"><span>${esc(g.title)}</span><span class="cnt"></span></button><div class="bb">${body}</div>`;
+    wrap.appendChild(sec);
+  });
+  qEls = {};
+  wrap.querySelectorAll('.q[data-i]').forEach((el) => { qEls[el.dataset.i] = el; });
+  wrap.addEventListener('click', (e) => {
+    const h = e.target.closest('.bh');
+    if (h) h.parentElement.classList.toggle('open');
+  });
+  wrap.addEventListener('input', onInput);
+  wrap.addEventListener('change', onInput);
+  wrap.addEventListener('pointerup', onSliderTouch);
+  wrap.addEventListener('keydown', (e) => { if (e.target.classList?.contains('slider') && /^Arrow|^Home$|^End$|^Page/.test(e.key)) setTimeout(() => onSliderTouch(e), 0); });
+  $('#btnSubmit').addEventListener('click', onPrimary);
+  quizBuilt = true;
+  void total;
+  refreshAll();
+  // открыть первый незаполненный блок
+  const first = groups.findIndex((g) => !groupDone(g));
+  openGroup(first === -1 ? groups.length - 1 : first, false);
+  if (inTg) { tg.MainButton.show(); tg.MainButton.enable(); }
+}
+
+function openGroup(gi, scroll) {
+  const secs = [...document.querySelectorAll('.blk')];
+  secs.forEach((s, i) => s.classList.toggle('open', i === gi));
+  if (scroll) secs[gi].scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function setSlider(el, v, touched) {
+  el.value = v;
+  el.style.setProperty('--p', (v / 10) * 100 + '%');
+  const q = el.closest('.q');
+  q.querySelector('.val').textContent = touched ? v : '–';
+  q.classList.toggle('untouched', !touched);
+}
+
+function onInput(e) {
+  const t = e.target;
+  if (t.classList.contains('slider')) {
+    const v = Number(t.value);
+    const q = t.closest('.q');
+    const first = q.classList.contains('untouched');
+    setSlider(t, v, true);
+    commitSlider(q, v, first);
+    return;
+  }
+  if (t.tagName === 'TEXTAREA') {
+    S[t.id] = t.value;
+    persist();
+    refreshAll();
+  }
+}
+
+// касание без сдвига (ползунок остаётся на месте): считаем ответом текущее значение
+function onSliderTouch(e) {
+  const t = e.target;
+  if (!t.classList || !t.classList.contains('slider')) return;
+  const q = t.closest('.q');
+  if (q.classList.contains('untouched')) {
+    const v = Number(t.value);
+    setSlider(t, v, true);
+    commitSlider(q, v, true);
+  }
+}
+
+function commitSlider(q, v, first) {
+  if (first) { try { tg.HapticFeedback.impactOccurred('light'); } catch { /* вне Telegram */ } }
+  const gEl = q.closest('.blk');
+  const g = groups[Number(gEl.dataset.g)];
+  const before = groupDone(g);
+  if (q.dataset.i != null) S.answers[Number(q.dataset.i)] = v;
+  else S.concernScore = v;
+  persist();
+  refreshAll();
+  if (!before && groupDone(g)) {
+    const next = groups.findIndex((x, i) => i > Number(gEl.dataset.g) && !groupDone(x));
+    if (next !== -1) openGroup(next, true);
+  }
+}
+
+function refreshAll() {
+  const total = requiredIdxs().length;
+  const n = answeredCount();
+  $('#pcount').textContent = `Отвечено ${n} из ${total}`;
+  $('#pbar').style.width = (n / total) * 100 + '%';
+  $('#pname').textContent = '';
+  document.querySelectorAll('.blk').forEach((sec) => {
+    const g = groups[Number(sec.dataset.g)];
+    const done = groupDone(g);
+    sec.classList.toggle('done', done);
+    sec.querySelector('.cnt').textContent = g.main ? (done ? 'готово' : '') : `${g.idxs.filter((i) => S.answers[i] != null).length}/${g.idxs.length}`;
+  });
+  const ok = isComplete();
+  $('#btnSubmit')?.classList.toggle('inactive', !ok);
+  if (inTg) tg.MainButton.setText(ok ? 'Отправить' : 'Далее');
+}
+
+function firstMissingEl() {
+  for (const g of groups) {
+    if (g.main) {
+      const m = mainMissing()[0];
+      if (m) return { el: document.querySelector(`.q[data-c="${m}"]`), gi: groups.indexOf(g) };
+    } else {
+      const i = g.idxs.find((x) => S.answers[x] == null);
+      if (i != null) return { el: qEls[i], gi: groups.indexOf(g) };
+    }
+  }
+  return null;
+}
+
+function onPrimary() {
+  if (sending) return;
+  if (!isComplete()) {
+    const m = firstMissingEl();
+    if (!m) return;
+    openGroup(m.gi, false);
+    m.el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    m.el.classList.remove('flash');
+    void m.el.offsetWidth;
+    m.el.classList.add('flash');
+    return;
+  }
+  submit();
+}
+
+// ---------- отправка ----------
+function payload() {
+  const base = {
+    kind: S.kind, answers: S.answers, concernText: S.concernText.trim(), concernScore: S.concernScore, successText: S.successText.trim(),
+    otherText: S.otherText.trim(), weekNote: S.weekNote.trim(), tz,
+  };
+  return inTg ? { ...base, initData: tg.initData } : { ...base, name: S.name.trim(), contact: S.contact.trim() };
+}
+
+function answersAsText() {
+  const L = [`Опросник состояния, ${inTg ? S.tgName : S.name}`, new Date().toLocaleDateString('ru-RU'), ''];
+  S.answers.forEach((v, i) => { if (v != null) L.push(`${i + 1}. ${QUESTIONS[i].text} Ответ: ${v}`); });
+  L.push('');
+  if (S.kind === 'full') {
+    L.push(`${CONCERN_QUESTIONS.concernText}\n${S.concernText.trim()}`);
+    L.push(`${CONCERN_QUESTIONS.concernScore} ${S.concernScore}`);
+    L.push(`${CONCERN_QUESTIONS.successText}\n${S.successText.trim()}`);
+    if (S.otherText.trim()) L.push(`${CONCERN_QUESTIONS.otherText}\n${S.otherText.trim()}`);
+  } else {
+    L.push(`Насколько сильно сейчас беспокоит «${S.concernLabel}»? ${S.concernScore}`);
+    if (S.weekNote.trim()) L.push(`Что изменилось за эту неделю?\n${S.weekNote.trim()}`);
+  }
+  return L.join('\n');
+}
+
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); return true; } catch { /* запасной путь */ }
+  const ta = document.createElement('textarea');
+  ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+  document.body.appendChild(ta); ta.select();
+  let ok = false;
+  try { ok = document.execCommand('copy'); } catch { ok = false; }
+  ta.remove();
+  return ok;
+}
+
+async function submit() {
+  sending = true;
+  if (inTg) tg.MainButton.showProgress();
+  const btn = $('#btnSubmit'); if (btn) { btn.disabled = true; btn.textContent = 'Отправляем...'; }
+  let res;
+  try { res = await post('/api/submit', payload()); } catch { res = { ok: false }; }
+  sending = false;
+  if (inTg) tg.MainButton.hideProgress();
+  if (btn) { btn.disabled = false; btn.textContent = 'Отправить'; }
+  if (res.ok) { lastResult = res; finished = true; store(null); return doneScreen(res); }
+  errorScreen();
+}
+
+function errorScreen() {
+  const html = `
+    <div class="notice safety" id="errBox">
+      <p><b>Не получилось отправить</b></p>
+      <p class="hint">Ваши ответы сохранены на этом устройстве. Проверьте интернет и попробуйте ещё раз.</p>
+      <button class="primary" id="btnRetry">Повторить</button>
+      <button class="secondary" id="btnCopy">Скопировать ответы</button>
+      <p class="hint" id="copied" style="margin:10px 0 0"></p>
+    </div>`;
+  $('#errBox')?.remove();
+  document.querySelector('.foot').insertAdjacentHTML('beforebegin', html);
+  $('#errBox').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  $('#btnRetry').addEventListener('click', () => { $('#errBox').remove(); submit(); });
+  $('#btnCopy').addEventListener('click', async () => {
+    const ok = await copyText(answersAsText());
+    $('#copied').textContent = ok ? 'Скопировано. Отправьте это сообщение терапевту.' : 'Не удалось скопировать. Выделите текст вручную.';
+  });
+}
+
+function hideMain() { if (inTg) { try { tg.MainButton.hide(); } catch { /* ok */ } } }
+
+function doneScreen(res) {
+  hideMain();
+  const therapist = (res.therapist || THERAPIST || '').replace(/^@/, '');
+  const safety = res.safety;
+  let html = '<h1>Спасибо</h1>';
+  if (inTg) html += `<p>${res.sees === false ? 'Ваши ответы отправлены терапевту.' : 'Спасибо, результаты пришли вам в чат.'}</p>`;
+  else html += '<p>Ваши ответы отправлены терапевту.</p>';
+  if (safety) {
+    html += `<div class="notice safety"><p>${esc(SAFETY_TEXT)}</p>${therapist ? `<a class="primary" style="display:block;text-align:center;text-decoration:none;line-height:28px" id="toTherapist" href="https://t.me/${esc(therapist)}">Написать терапевту</a>` : ''}</div>`;
+  }
+  if (!inTg) {
+    const bot = res.bot || BOT;
+    html += `<a class="primary" style="display:block;text-align:center;text-decoration:none;line-height:28px;margin-top:14px" href="https://t.me/${esc(bot)}?start=s_${esc(res.id)}">Получать результаты и напоминания в Telegram</a>`;
+  }
+  show(html);
+  if (inTg) {
+    $('#toTherapist')?.addEventListener('click', (e) => { e.preventDefault(); try { tg.openTelegramLink(`https://t.me/${therapist}`); } catch { location.href = `https://t.me/${therapist}`; } });
+    if (!safety) setTimeout(() => { try { tg.close(); } catch { /* ok */ } }, 2500);
+  }
+}
+
+// ---------- запуск ----------
+function begin() {
+  const want = params.get('kind') === 'short' ? 'short' : 'full';
+  if (!inTg) {
+    S.kind = 'full';
+    storeKey = 'diag:v1:web:full';
+    return startScreen();
+  }
+  S.tgName = '';
+  try { S.tgName = tg.initDataUnsafe?.user?.first_name || ''; } catch { /* ok */ }
+  post('/api/init', { initData: tg.initData, kind: want }).then((r) => {
+    if (!r.ok) {
+      if (r.error === 'unknown_client') return fatal('Не нашли вас в списке', 'Откройте ссылку, которую прислал вам терапевт, и нажмите «Старт».');
+      return fatal('Не удалось подтвердить вход', 'Закройте окно и откройте опросник из чата с ботом ещё раз.');
+    }
+    S.kind = r.kind;
+    S.firstTime = !!r.firstTime;
+    S.tgName = r.name || S.tgName;
+    if (r.kind === 'short') { S.items = r.items; S.concernLabel = r.concernText; }
+    let uid = 'u';
+    try { uid = tg.initDataUnsafe.user.id; } catch { /* ok */ }
+    storeKey = `diag:v1:tg:${uid}:${S.kind}`;
+    startScreen();
+  }).catch(() => fatal('Нет связи', 'Проверьте интернет и откройте опросник ещё раз.'));
+}
+begin();
+</script>
+</body>
+</html>
