@@ -170,7 +170,7 @@ function render() {
 
     // 5. Профиль по сферам
     h += `<h2>Профиль по сферам</h2><div class="card">`;
-    a.priorities.forEach((p) => {
+    [...a.priorities].sort((x, y) => y.mean - x.mean).forEach((p) => {
       h += `<div class="dom"><span>${esc(p.title)}</span><span class="num">${fmtNum(p.mean)}</span><div class="bar"><i style="width:${p.mean * 10}%;background:var(${colorFor(p.mean)})"></i></div><span class="pr">${p.priority}</span></div>`;
     });
     h += '</div>';
@@ -182,7 +182,7 @@ function render() {
     if (fulls.length > 1) {
       const d = describe(subs, subs.indexOf(lastFull));
       h += `<div class="card scroll"><table><tr><th>Сфера</th><th class="n">Первое</th><th class="n">Сейчас</th><th class="n">С начала</th><th class="n">К пред.</th></tr>`;
-      d.domains.forEach((m) => {
+      [...d.domains].sort((x, y) => y.mean - x.mean).forEach((m) => {
         const cls = (x) => (x == null || x === 0 ? '' : x < 0 ? 'better' : 'worse');
         h += `<tr><td>${esc(m.title)}</td><td class="n">${fmtNum(m.first)}</td><td class="n">${fmtNum(m.mean)}</td><td class="n ${cls(m.deltaFirst)}">${arrow(m.deltaFirst)}</td><td class="n ${cls(m.delta)}">${arrow(m.delta)}</td></tr>`;
       });
@@ -201,7 +201,7 @@ function render() {
     h += `<details><summary>Все ответы</summary><div class="card scroll"><table><tr><th>№</th><th>Вопрос</th>${fulls.map((s) => `<th class="n">${fmtDate(s.created_at, tz)}</th>`).join('')}</tr>`;
     BLOCKS.forEach((b, bi) => {
       h += `<tr><td colspan="${2 + fulls.length}"><b>${esc(b.title)}</b></td></tr>`;
-      QUESTIONS.filter((q) => q.block === bi).forEach((q) => {
+      QUESTIONS.filter((q) => q.block === bi).sort((x, y) => (lastFull.answers[y.idx] ?? -1) - (lastFull.answers[x.idx] ?? -1) || x.idx - y.idx).forEach((q) => {
         h += `<tr><td>${q.idx + 1}</td><td>${esc(q.text)}</td>${fulls.map((s) => `<td class="n">${s.answers[q.idx] ?? '-'}</td>`).join('')}</tr>`;
       });
     });

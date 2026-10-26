@@ -202,7 +202,7 @@ function outliers(answers) {
     const diff = v - m.raw;
     if (diff >= 3 - EPS) res.push({ idx, value: v, block: blockOf(idx), domainMean: m.mean, diff: round1(diff) });
   });
-  return res.sort((a, b) => b.diff - a.diff || b.value - a.value || a.idx - b.idx);
+  return res.sort((a, b) => b.value - a.value || b.diff - a.diff || a.idx - b.idx);
 }
 function entryPoints(answers) {
   const out = outliers(answers);
@@ -231,7 +231,7 @@ function contradictions(answers) {
       }
     }
   });
-  return res.sort((x, y) => y.diff - x.diff || x.block - y.block || x.low.idx - y.low.idx);
+  return res.sort((x, y) => y.high.value - x.high.value || y.diff - x.diff || x.block - y.block || x.low.idx - y.low.idx);
 }
 function criticalInfo(answers) {
   const v = answers[CRITICAL_INDEX];
@@ -388,7 +388,7 @@ function buildMarkdown(client, subsIn) {
     L.push(`По последнему полному прохождению (${fmtDate(lastFull.created_at, tz)}).`);
     L.push(`- Сумма: ${fmtNum(a.total)}/100 (${a.totalLabel})`);
     L.push("- Средние по сферам (0-10):");
-    a.priorities.forEach((p) => L.push(`  - ${p.title}: ${fmtNum(p.mean)} (${p.priority})`));
+    [...a.priorities].sort((x, y) => y.mean - x.mean).forEach((p) => L.push(`  - ${p.title}: ${fmtNum(p.mean)} (${p.priority})`));
     L.push("- Выбросы (сильнее всего отличается от обычного себя):");
     if (a.outliers.length) a.outliers.forEach((o) => L.push(`  - №${o.idx + 1} ${QUESTIONS[o.idx].label}: ${o.value} при среднем по сфере «${BLOCKS[o.block].title}» ${fmtNum(o.domainMean)}`));
     else L.push("  - нет");
@@ -407,7 +407,7 @@ function buildMarkdown(client, subsIn) {
       L.push("- Динамика между полными прохождениями:");
       L.push("  - Сумма: " + fulls.map((s) => `${fmtDate(s.created_at, tz)}: ${fmtNum(analyze(s.answers).total)}`).join("; "));
       const d = describe(subs, subs.indexOf(lastFull));
-      d.domains.forEach((m) => L.push(`  - ${m.title}: ${fmtNum(m.first)} → ${fmtNum(m.mean)} (${arrow(m.deltaFirst)} с начала, ${arrow(m.delta)} к предыдущему)`));
+      [...d.domains].sort((x, y) => y.mean - x.mean).forEach((m) => L.push(`  - ${m.title}: ${fmtNum(m.first)} → ${fmtNum(m.mean)} (${arrow(m.deltaFirst)} с начала, ${arrow(m.delta)} к предыдущему)`));
     }
   } else {
     L.push("Нет данных.");
@@ -415,11 +415,11 @@ function buildMarkdown(client, subsIn) {
   L.push("");
   L.push("# Все ответы");
   if (fulls.length) {
-    L.push("Баллы 0-10 по каждому полному прохождению.");
+    L.push("Баллы 0-10 по каждому полному прохождению. Пункты упорядочены по убыванию балла в последнем прохождении.");
     L.push("");
     L.push(`| № | Сфера | Вопрос | ${fulls.map((s) => fmtDate(s.created_at, tz)).join(" | ")} |`);
     L.push(`|---|---|---|${fulls.map(() => "---").join("|")}|`);
-    QUESTIONS.forEach((q2) => {
+    [...QUESTIONS].sort((x, y) => (lastFull.answers[y.idx] ?? -1) - (lastFull.answers[x.idx] ?? -1) || x.idx - y.idx).forEach((q2) => {
       L.push(`| ${q2.idx + 1} | ${BLOCKS[q2.block].title} | ${cell(q2.text)} | ${fulls.map((s) => s.answers[q2.idx] ?? "-").join(" | ")} |`);
     });
   } else {
@@ -428,7 +428,8 @@ function buildMarkdown(client, subsIn) {
   L.push("");
   L.push("# Короткие ретесты");
   if (shorts.length) {
-    const idxs = [...new Set(shorts.flatMap((s) => s.answers.map((v, i) => v != null ? i : -1).filter((i) => i >= 0)))].sort((a, b) => a - b);
+    const lastShort = shorts[shorts.length - 1];
+    const idxs = [...new Set(shorts.flatMap((s) => s.answers.map((v, i) => v != null ? i : -1).filter((i) => i >= 0)))].sort((a, b) => (lastShort.answers[b] ?? -1) - (lastShort.answers[a] ?? -1) || a - b);
     L.push("Баллы 0-10. «Беспокойство» это оценка главного беспокойства клиента.");
     L.push("");
     L.push(`| Дата | Беспокойство | ${idxs.map((i) => `№${i + 1} ${cell(QUESTIONS[i].label)}`).join(" | ")} |`);
@@ -565,7 +566,7 @@ function clientResultsText(d) {
     L.push("Ваши результаты");
     if (!d.isFirst) L.push("Чем меньше число, тем легче.");
     L.push("");
-    d.domains.forEach((m) => {
+    [...d.domains].sort((a, b) => b.mean - a.mean).forEach((m) => {
       const a = !d.isFirst && m.delta != null ? " " + arrow(m.delta) : "";
       L.push(`${bar(m.mean)} ${fmtNum(m.mean)}${a}  ${m.title}`);
     });
@@ -581,7 +582,7 @@ function clientResultsText(d) {
     L.push("Ваши результаты");
     L.push("Чем меньше число, тем легче.");
     L.push("");
-    d.items.forEach((it) => {
+    [...d.items].sort((a, b) => b.now - a.now || a.idx - b.idx).forEach((it) => {
       const lab = QUESTIONS[it.idx].label;
       const chg = it.prev != null ? `${it.prev} → ${it.now} ${arrow(it.delta)}` : `${it.now}`;
       L.push(`${lab}: ${chg}`);

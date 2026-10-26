@@ -21,7 +21,7 @@ export function clientResultsText(d) {
     L.push('Ваши результаты');
     if (!d.isFirst) L.push('Чем меньше число, тем легче.');
     L.push('');
-    d.domains.forEach((m) => {
+    [...d.domains].sort((a, b) => b.mean - a.mean).forEach((m) => {
       const a = !d.isFirst && m.delta != null ? ' ' + arrow(m.delta) : '';
       L.push(`${bar(m.mean)} ${fmtNum(m.mean)}${a}  ${m.title}`);
     });
@@ -37,7 +37,7 @@ export function clientResultsText(d) {
     L.push('Ваши результаты');
     L.push('Чем меньше число, тем легче.');
     L.push('');
-    d.items.forEach((it) => {
+    [...d.items].sort((a, b) => b.now - a.now || a.idx - b.idx).forEach((it) => {
       const lab = QUESTIONS[it.idx].label;
       const chg = it.prev != null ? `${it.prev} → ${it.now} ${arrow(it.delta)}` : `${it.now}`;
       L.push(`${lab}: ${chg}`);
