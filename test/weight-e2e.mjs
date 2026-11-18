@@ -87,6 +87,9 @@ let page = await open(CL);
 ok((await page.textContent('h1')) === 'Опросник по весу' && (await page.textContent('#app')).includes('Займёт 5–7 минут.') && (await page.textContent('#app')).includes('Ответы увидит только Егор.'), 'стартовый экран дословно');
 ok(await page.$eval('#back', (b) => b.classList.contains('hidden')), 'на первом экране нет «Назад»');
 ok(!(await page.isVisible('#err')), 'плашка ошибки при открытии скрыта');
+// «Повторить» при пустой очереди не должно ломать дальнейшие сохранения
+await page.evaluate(() => document.getElementById('errRetry').click());
+await sleep(200);
 await page.click('#go');
 ok((await page.textContent('.head')) === 'Насколько это про вас?' && (await qText(page)).startsWith('Мой вес может прыгнуть'), 'вопрос 1 и заголовок «Насколько это про вас?»');
 ok(!(await page.textContent('#app')).match(/вода|брошенност|ГНМ|балл/i), 'нет блоков, баллов и «ГНМ» на экране');

@@ -117,6 +117,8 @@ function save(body) {
 }
 function flush() {
   if (flushing) return flushing;
+  // Сбрасываем flushing только после завершения: если очередь пуста, тело выполнится сразу,
+  // и обнуление внутри него раньше присваивания навсегда «залипло» бы очередь
   flushing = (async () => {
     while (pending.length) {
       let r;
@@ -130,9 +132,8 @@ function flush() {
       pending.shift();
     }
     if (!pending.length) document.getElementById('err').hidden = true;
-    flushing = null;
     return pending.length === 0;
-  })();
+  })().finally(() => { flushing = null; });
   return flushing;
 }
 // Приложение закрывают или сворачивают: досылаем неотправленное фоновым запросом
