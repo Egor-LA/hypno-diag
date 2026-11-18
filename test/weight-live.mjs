@@ -85,12 +85,14 @@ await tap('Не сдавала');
 await tap('Ничего из этого'); await page.click('#go'); await sleep(250);
 await tap('Ничего из этого');
 await page.click('#go');
-await page.waitForFunction(() => document.getElementById('app').textContent.includes('Спасибо. Ответы уже у Егора'), null, { timeout: 20000 }).catch(() => {});
-ok((await page.textContent('#app')).includes('Спасибо. Ответы уже у Егора, он разберёт их с вами на встрече.'), 'финальный экран, отчёт ушёл Егору');
+await page.waitForFunction(() => document.getElementById('app').textContent.includes('Написать Егору'), null, { timeout: 20000 }).catch(() => {});
+const finText = await page.textContent('#app');
+ok(finText.includes('Спасибо. Ответы уже у Егора.') && finText.includes('Главная тема: вода / брошенность (фонит явно)') && finText.includes('@egor_lakhtiuk') && !/\/15/.test(finText), 'финальный экран: темы и уровни, ссылка на Егора; отчёт ушёл Егору');
 await page.screenshot({ path: '/tmp/wt_live_final.png' });
 await page.context().close();
 page = await open();
-ok((await page.textContent('#app')).includes('Спасибо. Ответы уже у Егора'), 'повторное открытие: финальный экран');
+await page.waitForSelector('#write', { timeout: 20000 });
+ok((await page.textContent('#app')).includes('Главная тема: вода / брошенность'), 'повторное открытие: тот же итог');
 await page.context().close();
 await browser.close();
 
@@ -104,6 +106,11 @@ for (const n of [12, 14, 16]) await api('/api/answer', CL, { key: 'f' + n, skipp
 for (const [key, b] of [['s3_1', { value: 'С детства' }], ['s3_1_text', { skipped: true }], ['s3_2', { value: ['Живот'] }], ['s3_3', { skipped: true }], ['s4_1', { value: 'Нет' }], ['s4_2', { value: 'Сдавала, всё в норме' }], ['s4_3', { value: ['Ничего из этого'] }], ['s4_4', { value: ['Ничего из этого'] }]]) await api('/api/answer', CL, { key, ...b });
 const fin = await api('/api/finish', CL);
 ok(fin.ok, 'ретест завершён, второй отчёт ушёл Егору');
+
+// открытый вход: новый человек без ссылки
+ok(await hook({ message: { message_id: 1, from: { id: 7000002, first_name: 'Тест', last_name: 'Открытый' }, chat: { id: 7000002, type: 'private' }, text: '/start' } }) === 200, 'новый человек без ссылки нажал «Старт»');
+const st2 = await api('/api/state', 7000002);
+ok(st2.ok && st2.status === 'in_progress', 'новый человек сразу может проходить тест');
 
 // чужой ID
 for (const t of ['/new Хакер', '/list', '/result Тест Вес', '/retest Тест Вес']) await hook(msg(7000099, t));

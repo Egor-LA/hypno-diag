@@ -164,7 +164,7 @@ ok((await sql("select count(*)::int n from clients where name='Тест'"))[0].n
 await hook(cb(ADMIN, 'del:' + c.id));
 const w = (await sql("select id from clients where name='Веб Клиент'"))[0];
 await hook(cb(ADMIN, 'del:' + w.id));
-ok((await sql('select (select count(*) from clients)::int a, (select count(*) from submissions)::int b, (select count(*) from reminders)::int d'))[0].a === 0, 'тестовые клиенты удалены полностью');
+ok((await sql("select count(*)::int a from clients where name in ('Тест','Веб Клиент')"))[0].a === 0, 'тестовые клиенты удалены полностью');
 
 await browser.close();
 console.log(fails ? `\nПРОВАЛОВ: ${fails}` : '\nВСЕ ПРОВЕРКИ НА ЖИВЫХ СЕРВИСАХ ПРОЙДЕНЫ');
