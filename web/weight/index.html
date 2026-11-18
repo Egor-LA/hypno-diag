@@ -70,6 +70,8 @@ const isLocal = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
 const api = isLocal && params.get('api') ? params.get('api') : API;
 const app = document.getElementById('app');
 const NO_LINK = 'Этот опросник открывается по личной ссылке. Попросите её у Егора';
+// Функция запускается рядом с базой (Франкфурт): иначе каждый ответ идёт через полмира
+const REGION = '?forceFunctionRegion=eu-central-1';
 const FINAL = 'Спасибо. Ответы уже у Егора, он разберёт их с вами на встрече.';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -99,7 +101,7 @@ async function post(path, body) {
   const ctl = new AbortController();
   const t = setTimeout(() => ctl.abort(), 20000);
   try {
-    const r = await fetch(api + path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ initData: tg.initData, ...body }), signal: ctl.signal });
+    const r = await fetch(api + path + REGION, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ initData: tg.initData, ...body }), signal: ctl.signal });
     const j = await r.json().catch(() => ({}));
     return { status: r.status, ...j };
   } finally { clearTimeout(t); }
@@ -135,7 +137,7 @@ function flush() {
 // Приложение закрывают или сворачивают: досылаем неотправленное фоновым запросом
 function beaconAll() {
   if (!pending.length || !navigator.sendBeacon) return;
-  for (const p of pending) navigator.sendBeacon(api + '/api/answer', JSON.stringify({ initData: tg.initData, ...strip(p) }));
+  for (const p of pending) navigator.sendBeacon(api + '/api/answer' + REGION, JSON.stringify({ initData: tg.initData, ...strip(p) }));
 }
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') beaconAll(); });
 window.addEventListener('pagehide', beaconAll);
