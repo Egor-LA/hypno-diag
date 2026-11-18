@@ -418,3 +418,7 @@ enabled = true
 [functions.diag]
 verify_jwt = false
 entrypoint = "./functions/diag/index.js"
+
+[functions.weight]
+verify_jwt = false
+entrypoint = "./functions/weight/index.js"

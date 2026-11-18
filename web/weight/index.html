@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="color-scheme" content="light dark">
+<title>Опросник по весу</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap&subset=cyrillic" rel="stylesheet">
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+:root {
+  --bg: #faf8f5; --card: #ffffff; --text: #1f2430; --hint: #6b7280; --accent: #3d6b5e; --accent-text: #ffffff;
+  --border: #e6e1d8; --track: #dcd6cb; --warn: #b4432f;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #14171c; --card: #1d2128; --text: #eceae4; --hint: #9aa1ad; --accent: #7fb5a3; --accent-text: #10201b;
+    --border: #2d333c; --track: #3a414c; --warn: #e48a76; }
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 400 17px/1.45 'Manrope', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }
+#app { max-width: 560px; margin: 0 auto; padding: 0 16px calc(32px + env(safe-area-inset-bottom)); min-height: 100vh; display: flex; flex-direction: column; }
+.top { position: sticky; top: 0; z-index: 5; background: var(--bg); padding: 12px 0 10px; display: flex; align-items: center; gap: 12px; }
+.bar { flex: 1; height: 6px; border-radius: 3px; background: var(--track); overflow: hidden; }
+.bar > i { display: block; height: 100%; background: var(--accent); transition: width .25s; }
+.back { background: none; border: 0; color: var(--accent); font: 600 15px 'Manrope', sans-serif; padding: 8px 4px; min-width: 64px; text-align: left; cursor: pointer; }
+.back.hidden { visibility: hidden; }
+h1 { font-size: 26px; line-height: 1.2; margin: 28px 0 16px; }
+.head { color: var(--hint); font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+.q { font-size: 20px; font-weight: 600; line-height: 1.35; margin: 0 0 22px; }
+.orig { color: var(--hint); font-size: 15px; margin: 20px 0 10px; }
+p { margin: 0 0 12px; }
+.opts { display: flex; flex-direction: column; gap: 10px; }
+.opt { display: block; width: 100%; min-height: 54px; text-align: left; padding: 14px 16px; border-radius: 14px; border: 1.5px solid var(--border);
+  background: var(--card); color: var(--text); font: 600 16px 'Manrope', sans-serif; cursor: pointer; }
+.opt.sel { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, var(--card)); }
+.opt.multi::before { content: ''; display: inline-block; width: 18px; height: 18px; border-radius: 5px; border: 2px solid var(--hint); margin-right: 12px; vertical-align: -3px; }
+.opt.multi.sel::before { background: var(--accent); border-color: var(--accent); box-shadow: inset 0 0 0 3px var(--card); }
+textarea { display: block; width: 100%; min-height: 120px; margin: 4px 0 16px; padding: 12px; font: inherit; color: var(--text); background: var(--card);
+  border: 1.5px solid var(--border); border-radius: 14px; resize: vertical; }
+textarea:focus { outline: none; border-color: var(--accent); }
+label.lbl { display: block; font-weight: 600; margin: 16px 0 6px; }
+.row { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
+.primary, .secondary { display: block; width: 100%; min-height: 52px; border-radius: 14px; font: 700 16px 'Manrope', sans-serif; cursor: pointer; }
+.primary { background: var(--accent); color: var(--accent-text); border: 0; }
+.primary:disabled { opacity: .4; cursor: default; }
+.secondary { background: transparent; color: var(--text); border: 1.5px solid var(--border); }
+.center { margin-top: 18vh; text-align: center; }
+.err { position: fixed; left: 12px; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom)); background: var(--warn); color: #fff; border-radius: 12px;
+  padding: 12px 14px; display: flex; gap: 10px; align-items: center; justify-content: space-between; font-size: 15px; z-index: 20; }
+.err button { background: #fff; color: var(--warn); border: 0; border-radius: 10px; padding: 8px 12px; font: 700 14px 'Manrope', sans-serif; }
+.spinner { width: 34px; height: 34px; border: 4px solid var(--track); border-top-color: var(--accent); border-radius: 50%; margin: 30vh auto 0; animation: sp 1s linear infinite; }
+@keyframes sp { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<div id="app"><div class="spinner" aria-label="Загрузка"></div></div>
+<div class="err" id="err" hidden><span>Ответ не сохранился. Проверьте интернет.</span><button id="errRetry">Повторить</button></div>
+
+<script type="module">
+import { screens, firstIncomplete, NONE } from './steps.js';
+import { API } from './config.js';
+
+const tg = window.Telegram && window.Telegram.WebApp;
+const inTg = !!(tg && tg.initData);
+const params = new URLSearchParams(location.search);
+const isLocal = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
+const api = isLocal && params.get('api') ? params.get('api') : API;
+const app = document.getElementById('app');
+const NO_LINK = 'Этот опросник открывается по личной ссылке. Попросите её у Егора';
+const FINAL = 'Спасибо. Ответы уже у Егора, он разберёт их с вами на встрече.';
+
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+let C = null; // тексты с сервера
+let ans = {}; // ответы: { ключ: { value, text, skipped } }
+let cur = 'start';
+
+// ---------- тема Telegram ----------
+if (inTg) {
+  try {
+    tg.ready(); tg.expand();
+    const apply = () => {
+      const t = tg.themeParams || {};
+      const r = document.documentElement.style;
+      const set = (k, v) => { if (v) r.setProperty(k, v); };
+      set('--bg', t.secondary_bg_color || t.bg_color); set('--card', t.bg_color); set('--text', t.text_color); set('--hint', t.hint_color);
+      set('--accent', t.button_color); set('--accent-text', t.button_text_color); set('--warn', t.destructive_text_color);
+      if (t.hint_color) { set('--border', t.hint_color + '44'); set('--track', t.hint_color + '55'); }
+    };
+    apply(); tg.onEvent('themeChanged', apply);
+  } catch { /* вне Telegram */ }
+}
+
+// ---------- сеть: сохранения идут по очереди ----------
+async function post(path, body) {
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), 20000);
+  try {
+    const r = await fetch(api + path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ initData: tg.initData, ...body }), signal: ctl.signal });
+    const j = await r.json().catch(() => ({}));
+    return { status: r.status, ...j };
+  } finally { clearTimeout(t); }
+}
+
+const pending = [];
+let flushing = null;
+function save(body) {
+  pending.push(body);
+  return flush();
+}
+function flush() {
+  if (flushing) return flushing;
+  flushing = (async () => {
+    while (pending.length) {
+      let r;
+      try { r = await post('/api/answer', pending[0]); } catch { r = { ok: false }; }
+      if (!r.ok) {
+        if (r.error === 'finished') { pending.length = 0; showFinal(); break; }
+        document.getElementById('err').hidden = false;
+        break;
+      }
+      pending.shift();
+    }
+    if (!pending.length) document.getElementById('err').hidden = true;
+    flushing = null;
+    return pending.length === 0;
+  })();
+  return flushing;
+}
+document.getElementById('errRetry').addEventListener('click', () => { document.getElementById('err').hidden = true; flush(); });
+
+// ---------- навигация ----------
+function go(step) {
+  cur = step;
+  save({ step });
+  render();
+  window.scrollTo(0, 0);
+}
+function next() {
+  const list = screens(ans);
+  const i = list.indexOf(cur);
+  if (i === list.length - 1) return finish();
+  go(list[i + 1]);
+}
+function back() {
+  const list = screens(ans);
+  const i = list.indexOf(cur);
+  if (i > 0) go(list[i - 1]);
+}
+function setAnswer(key, a) {
+  ans[key] = a;
+  save({ key, ...a });
+}
+
+// ---------- экраны ----------
+function frame(inner) {
+  const list = screens(ans);
+  const i = Math.max(0, list.indexOf(cur));
+  const pct = Math.round((i / (list.length - 1)) * 100);
+  app.innerHTML = `<div class="top"><button class="back ${i === 0 ? 'hidden' : ''}" id="back">← Назад</button><div class="bar"><i style="width:${pct}%"></i></div></div>${inner}`;
+  document.getElementById('back').addEventListener('click', back);
+}
+
+const btn = (cls, label, attrs = '') => `<button class="${cls}" ${attrs}>${esc(label)}</button>`;
+
+function render() {
+  if (cur === 'start') return renderStart();
+  if (cur === 'intro') return renderIntro();
+  if (/^q\d+$/.test(cur)) return renderStatement();
+  if (/^f\d+$/.test(cur)) return renderText(cur, C.followups[cur].prompt, C.followups[cur].statement);
+  if (cur === 's3_1') return renderSingle('s3_1', C.texts.s3_1, C.s3_1);
+  if (cur === 's3_1_text' || cur === 's3_3') return renderText(cur, C.texts[cur]);
+  if (cur === 's3_2') return renderMulti('s3_2', C.texts.s3_2, C.s3_2, false);
+  if (cur === 's4_1') return renderS41();
+  if (cur === 's4_2') return renderS42();
+  if (cur === 's4_3' || cur === 's4_4') return renderMulti(cur, C.texts[cur], C[cur], true);
+  return renderStart();
+}
+
+function renderStart() {
+  frame(`<h1>Опросник по весу</h1>
+    <p>25 коротких утверждений и несколько вопросов. Займёт 5–7 минут.</p>
+    <p>Отвечайте быстро, по первому ощущению. Правильных и неправильных ответов нет.</p>
+    <p>Ответы увидит только Егор.</p>
+    <div class="row" style="margin-top:24px">${btn('primary', 'Начать', 'id="go"')}</div>`);
+  document.getElementById('go').addEventListener('click', next);
+}
+
+function renderIntro() {
+  frame(`<p class="q" style="margin-top:28px">Теперь несколько уточнений по вашим ответам. Пишите коротко, как есть.</p>
+    <div class="row">${btn('primary', 'Дальше', 'id="go"')}</div>`);
+  document.getElementById('go').addEventListener('click', next);
+}
+
+function renderStatement() {
+  const s = C.statements.find((x) => x.key === cur);
+  const v = ans[cur]?.value;
+  frame(`<div class="head">Насколько это про вас?</div><p class="q">${esc(s.text)}</p>
+    <div class="opts">${C.options.map((o, i) => btn(`opt ${v === i ? 'sel' : ''}`, o, `data-v="${i}"`)).join('')}</div>`);
+  app.querySelectorAll('.opt').forEach((b) => b.addEventListener('click', () => {
+    setAnswer(cur, { value: Number(b.dataset.v), text: null, skipped: false });
+    try { tg.HapticFeedback.selectionChanged(); } catch { /* ok */ }
+    next();
+  }));
+}
+
+function renderText(key, question, orig) {
+  const a = ans[key];
+  frame(`${orig ? `<p class="orig">${esc(orig)}</p>` : '<div style="height:20px"></div>'}<p class="q">${esc(question)}</p>
+    <textarea id="t" maxlength="3000">${esc(a && !a.skipped ? a.text : '')}</textarea>
+    <div class="row">${btn('primary', 'Дальше', 'id="go"')}${btn('secondary', 'Пропустить', 'id="skip"')}</div>`);
+  const t = document.getElementById('t');
+  const go = document.getElementById('go');
+  const sync = () => { go.disabled = !t.value.trim(); };
+  t.addEventListener('input', sync); sync();
+  go.addEventListener('click', () => { setAnswer(key, { value: null, text: t.value.trim(), skipped: false }); next(); });
+  document.getElementById('skip').addEventListener('click', () => { setAnswer(key, { value: null, text: null, skipped: true }); next(); });
+}
+
+function renderSingle(key, question, opts) {
+  const v = ans[key]?.value;
+  frame(`<div style="height:20px"></div><p class="q">${esc(question)}</p>
+    <div class="opts">${opts.map((o) => btn(`opt ${v === o ? 'sel' : ''}`, o, `data-v="${esc(o)}"`)).join('')}</div>`);
+  app.querySelectorAll('.opt').forEach((b) => b.addEventListener('click', () => { setAnswer(key, { value: b.dataset.v, text: null, skipped: false }); next(); }));
+}
+
+// Множественный выбор. exclusive: «Ничего из этого» снимает остальные и наоборот
+function renderMulti(key, question, opts, exclusive) {
+  let sel = Array.isArray(ans[key]?.value) ? [...ans[key].value] : [];
+  const other = key === 's3_2';
+  frame(`<div style="height:20px"></div><p class="q">${esc(question)}</p>
+    <div class="opts">${opts.map((o) => btn('opt multi', o, `data-v="${esc(o)}"`)).join('')}</div>
+    ${other ? `<div id="otherBox" hidden><label class="lbl" for="t">Другое</label><textarea id="t" maxlength="3000">${esc(ans[key]?.text || '')}</textarea></div>` : '<div style="height:16px"></div>'}
+    <div class="row">${btn('primary', 'Дальше', 'id="go"')}</div>`);
+  const go = document.getElementById('go');
+  const paint = () => {
+    app.querySelectorAll('.opt').forEach((b) => b.classList.toggle('sel', sel.includes(b.dataset.v)));
+    go.disabled = sel.length === 0;
+    if (other) document.getElementById('otherBox').hidden = !sel.includes('Другое');
+  };
+  app.querySelectorAll('.opt').forEach((b) => b.addEventListener('click', () => {
+    const v = b.dataset.v;
+    if (sel.includes(v)) sel = sel.filter((x) => x !== v);
+    else if (exclusive && v === NONE) sel = [NONE];
+    else sel = [...sel.filter((x) => !(exclusive && x === NONE)), v];
+    paint();
+  }));
+  paint();
+  go.addEventListener('click', () => {
+    const ordered = opts.filter((o) => sel.includes(o));
+    const text = other && ordered.includes('Другое') ? document.getElementById('t').value.trim() || null : null;
+    setAnswer(key, { value: ordered, text, skipped: false });
+    next();
+  });
+}
+
+function renderS41() {
+  const a = ans.s4_1;
+  frame(`<div style="height:20px"></div><p class="q">${esc(C.texts.s4_1)}</p>
+    <div class="opts">${btn(`opt ${a?.value === 'Нет' ? 'sel' : ''}`, 'Нет', 'id="no"')}${btn(`opt ${a?.value === 'Да' ? 'sel' : ''}`, 'Да', 'id="yes"')}</div>
+    <div id="more" ${a?.value === 'Да' ? '' : 'hidden'}><label class="lbl" for="t">Какие?</label><textarea id="t" maxlength="3000">${esc(a?.value === 'Да' ? a.text : '')}</textarea>
+    <div class="row">${btn('primary', 'Дальше', 'id="go"')}</div></div>`);
+  const t = document.getElementById('t');
+  const go = document.getElementById('go');
+  const sync = () => { go.disabled = !t.value.trim(); };
+  t.addEventListener('input', sync); sync();
+  document.getElementById('no').addEventListener('click', () => { setAnswer('s4_1', { value: 'Нет', text: null, skipped: false }); next(); });
+  document.getElementById('yes').addEventListener('click', () => {
+    document.getElementById('yes').classList.add('sel'); document.getElementById('no').classList.remove('sel');
+    document.getElementById('more').hidden = false; t.focus();
+  });
+  go.addEventListener('click', () => { setAnswer('s4_1', { value: 'Да', text: t.value.trim(), skipped: false }); next(); });
+}
+
+function renderS42() {
+  const a = ans.s4_2;
+  const DEV = C.s4_2[2];
+  frame(`<div style="height:20px"></div><p class="q">${esc(C.texts.s4_2)}</p>
+    <div class="opts">${C.s4_2.map((o, i) => btn(`opt ${a?.value === o ? 'sel' : ''}`, o, `data-i="${i}"`)).join('')}</div>
+    <div id="more" ${a?.value === DEV ? '' : 'hidden'}><label class="lbl" for="t">Какие?</label><textarea id="t" maxlength="3000">${esc(a?.value === DEV && !a.skipped ? a.text : '')}</textarea>
+    <div class="row">${btn('primary', 'Дальше', 'id="go"')}${btn('secondary', 'Пропустить', 'id="skip"')}</div></div>`);
+  const t = document.getElementById('t');
+  const go = document.getElementById('go');
+  const sync = () => { go.disabled = !t.value.trim(); };
+  t.addEventListener('input', sync); sync();
+  app.querySelectorAll('.opt').forEach((b) => b.addEventListener('click', () => {
+    const o = C.s4_2[Number(b.dataset.i)];
+    if (o !== DEV) { setAnswer('s4_2', { value: o, text: null, skipped: false }); return next(); }
+    app.querySelectorAll('.opt').forEach((x) => x.classList.toggle('sel', x === b));
+    document.getElementById('more').hidden = false; t.focus();
+  }));
+  go.addEventListener('click', () => { setAnswer('s4_2', { value: DEV, text: t.value.trim(), skipped: false }); next(); });
+  document.getElementById('skip').addEventListener('click', () => { setAnswer('s4_2', { value: DEV, text: null, skipped: true }); next(); });
+}
+
+function message(text) {
+  app.innerHTML = `<div class="center"><p class="q">${esc(text)}</p></div>`;
+}
+function showFinal() { message(FINAL); }
+
+async function finish() {
+  app.innerHTML = '<div class="spinner"></div>';
+  const saved = await flush();
+  if (!saved) { render(); return; }
+  let r;
+  try { r = await post('/api/finish', {}); } catch { r = { ok: false }; }
+  if (r.ok) return showFinal();
+  if (r.error === 'incomplete' && r.step) { cur = r.step; render(); return; }
+  render();
+  document.getElementById('err').hidden = false;
+}
+
+// ---------- запуск ----------
+async function boot() {
+  if (!inTg) return message(NO_LINK);
+  let r;
+  try { r = await post('/api/state', {}); } catch { return message('Нет связи. Проверьте интернет и откройте опросник ещё раз.'); }
+  if (!r.ok) return message(r.error === 'no_link' ? NO_LINK : 'Не удалось открыть опросник. Закройте окно и откройте его из чата с ботом ещё раз.');
+  if (r.status === 'finished') return showFinal();
+  C = r.content;
+  ans = r.answers || {};
+  const list = screens(ans);
+  // продолжаем с того же экрана; если он больше не актуален, с первого неотвеченного
+  cur = list.includes(r.step) ? r.step : firstIncomplete(ans) || 'start';
+  render();
+}
+boot();
+</script>
+</body>
+</html>

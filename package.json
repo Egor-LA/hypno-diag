@@ -4,7 +4,9 @@
   "type": "module",
   "scripts": {
     "build": "esbuild supabase/entry.js --bundle --format=esm --platform=neutral --charset=utf8 --external:npm:postgres@3.4.5 --loader:.sql=text --outfile=supabase/functions/diag/index.js",
-    "test:local": "node test/e2e.mjs"
+    "test:local": "node test/e2e.mjs",
+    "build:weight": "esbuild supabase/weight-entry.js --bundle --format=esm --platform=neutral --charset=utf8 --external:npm:postgres@3.4.5 --outfile=supabase/functions/weight/index.js",
+    "test:weight": "node test/weight-scoring.mjs && node test/weight-e2e.mjs"
   },
   "devDependencies": {
     "esbuild": "^0.25.0",
