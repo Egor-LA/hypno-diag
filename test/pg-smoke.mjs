@@ -72,5 +72,12 @@ await hook(msg(1001, '/delete Пг'));
 l = await log();
 await hook(cb(1001, l.at(-1).body.reply_markup.inline_keyboard[0][0].callback_data));
 ok((await pg.query('select count(*)::int n from clients')).rows[0].n === 0 && (await pg.query('select count(*)::int n from submissions')).rows[0].n === 0, '/delete (batch) на Postgres');
+// открытый вход: новый человек без приглашения
+await fetch('http://127.0.0.1:8788/_clear');
+await hook({ message: { message_id: 1, from: { id: 8008, first_name: 'Ольга', username: 'olga' }, chat: { id: 8008, type: 'private' }, text: '/start' } });
+l = await log();
+const self = (await pg.query('select name, invite from clients where chat_id = 8008')).rows;
+ok(self.length === 1 && self[0].name === 'Ольга (@olga)' && self[0].invite === null, 'открытый вход: запись из профиля Telegram');
+ok(l.some((x) => x.body.chat_id === 8008 && x.body.text?.startsWith('Здравствуйте, Ольга!')) && l.some((x) => x.body.text === 'Новый человек: Ольга (@olga) открыл(а) опросник состояния'), 'приветствие без @логина и уведомление Егору');
 console.log(fails ? 'ПРОВАЛОВ: ' + fails : 'POSTGRES: ВСЁ ОК');
 process.exit(fails ? 1 : 0);

@@ -178,3 +178,26 @@ export function reportMarkdown({ name, number, finishedAt, ans, ev, prevScores }
 
   return { filename: `ves_${safeName(name)}_${fileDate(finishedAt)}.md`, text: L.join('\n') };
 }
+
+// ---------- что видит клиентка ----------
+
+// Темы и уровни без цифр (решение Егора: частичный результат + разбор у него)
+export function clientSummary({ scores, primary, second }) {
+  const L = [];
+  if (primary.length) {
+    L.push(`${primary.length > 1 ? 'Главные темы' : 'Главная тема'}: ${primary.map((l) => `${BLOCK_NAMES[l]} (${levelOf(scores[l])})`).join('; ')}`);
+    if (second) L.push(`Ещё участвует: ${BLOCK_NAMES[second]} (${levelOf(scores[second])})`);
+  } else {
+    L.push('Тест не выделил одну главную тему. Это тоже результат: Егор разберёт ваши ответы и подскажет, с чего начать.');
+  }
+  return L;
+}
+
+export const ctaText = (tgName) => `Подробный разбор и проработку можно получить у Егора в Telegram: @${tgName}`;
+
+// Восстановить итог из сохранённого прохождения
+export function summaryFromSession(s) {
+  let scores = s.scores;
+  if (typeof scores === 'string') scores = JSON.parse(scores);
+  return clientSummary({ scores, primary: s.primary_theme ? s.primary_theme.split(' и ') : [], second: s.second_theme || null });
+}

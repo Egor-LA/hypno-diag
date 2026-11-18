@@ -69,10 +69,10 @@ const params = new URLSearchParams(location.search);
 const isLocal = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
 const api = isLocal && params.get('api') ? params.get('api') : API;
 const app = document.getElementById('app');
-const NO_LINK = 'Этот опросник открывается по личной ссылке. Попросите её у Егора';
+const NO_LINK = 'Чтобы пройти опросник, откройте бота @overweight_gnm_bot и нажмите «Старт».';
 // Функция запускается рядом с базой (Франкфурт): иначе каждый ответ идёт через полмира
 const REGION = '?forceFunctionRegion=eu-central-1';
-const FINAL = 'Спасибо. Ответы уже у Егора, он разберёт их с вами на встрече.';
+const FINAL = 'Спасибо. Ответы уже у Егора.';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
@@ -122,7 +122,7 @@ function flush() {
       pending[0].sent = true;
       try { r = await post('/api/answer', strip(pending[0])); } catch { r = { ok: false }; }
       if (!r.ok) {
-        if (r.error === 'finished') { pending.length = 0; showFinal(); break; }
+        if (r.error === 'finished') { pending.length = 0; boot(); break; }
         document.getElementById('err').hidden = false;
         break;
       }
@@ -306,7 +306,18 @@ function renderS42() {
 function message(text) {
   app.innerHTML = `<div class="center"><p class="q">${esc(text)}</p></div>`;
 }
-function showFinal() { message(FINAL); }
+// Итог для клиентки: темы и уровни без цифр, разбор у Егора
+function showFinal(summary = [], therapist = 'egor_lakhtiuk') {
+  try { tg.MainButton.hide(); } catch { /* ok */ }
+  app.innerHTML = `<div class="center" style="margin-top:12vh;text-align:left"><p class="q">${esc(FINAL)}</p>
+    ${summary.map((l) => `<p>${esc(l)}</p>`).join('')}
+    <p style="margin-top:20px">Подробный разбор и проработку можно получить у Егора в Telegram: @${esc(therapist)}</p>
+    <div class="row" style="margin-top:16px">${btn('primary', 'Написать Егору', 'id="write"')}</div></div>`;
+  document.getElementById('write').addEventListener('click', () => {
+    const url = `https://t.me/${therapist}`;
+    try { tg.openTelegramLink(url); } catch { location.href = url; }
+  });
+}
 
 async function finish() {
   app.innerHTML = '<div class="spinner"></div>';
@@ -314,7 +325,7 @@ async function finish() {
   if (!saved) { render(); return; }
   let r;
   try { r = await post('/api/finish', {}); } catch { r = { ok: false }; }
-  if (r.ok) return showFinal();
+  if (r.ok) return r.already ? boot() : showFinal(r.summary, r.therapist);
   if (r.error === 'incomplete' && r.step) { cur = r.step; render(); return; }
   render();
   document.getElementById('err').hidden = false;
@@ -326,7 +337,7 @@ async function boot() {
   let r;
   try { r = await post('/api/state', {}); } catch { return message('Нет связи. Проверьте интернет и откройте опросник ещё раз.'); }
   if (!r.ok) return message(r.error === 'no_link' ? NO_LINK : 'Не удалось открыть опросник. Закройте окно и откройте его из чата с ботом ещё раз.');
-  if (r.status === 'finished') return showFinal();
+  if (r.status === 'finished') return showFinal(r.summary || [], r.therapist);
   C = r.content;
   ans = r.answers || {};
   const list = screens(ans);

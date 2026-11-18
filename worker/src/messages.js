@@ -14,7 +14,8 @@ export function kindTitle(d) {
 
 // ---------- клиенту ----------
 
-export function clientResultsText(d) {
+// opts.invited: клиент пришёл по приглашению Егора; opts.therapist: Telegram Егора для ссылки на разбор
+export function clientResultsText(d, opts = {}) {
   const L = [];
   const s = d.sub;
   if (d.kind === 'full') {
@@ -29,7 +30,7 @@ export function clientResultsText(d) {
       L.push('');
       L.push(`Главное беспокойство: было ${d.concern.prev}, сейчас ${d.concern.now}`);
     }
-    if (d.isFirst) {
+    if (d.isFirst && opts.invited) {
       L.push('');
       L.push('Обсудим это на встрече.');
     }
@@ -50,6 +51,10 @@ export function clientResultsText(d) {
   if (clientSafetyTriggered(s.answers)) {
     L.push('');
     L.push(SAFETY_TEXT);
+  }
+  if (opts.therapist) {
+    L.push('');
+    L.push(`Подробный разбор и проработку можно получить у Егора в Telegram: @${opts.therapist}`);
   }
   return L.join('\n');
 }

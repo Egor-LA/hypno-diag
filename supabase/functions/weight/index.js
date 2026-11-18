@@ -317,6 +317,22 @@ function reportMarkdown({ name, number, finishedAt, ans, ev, prevScores }) {
   L.push("");
   return { filename: `ves_${safeName(name)}_${fileDate(finishedAt)}.md`, text: L.join("\n") };
 }
+function clientSummary({ scores, primary, second }) {
+  const L = [];
+  if (primary.length) {
+    L.push(`${primary.length > 1 ? "Главные темы" : "Главная тема"}: ${primary.map((l) => `${BLOCK_NAMES[l]} (${levelOf(scores[l])})`).join("; ")}`);
+    if (second) L.push(`Ещё участвует: ${BLOCK_NAMES[second]} (${levelOf(scores[second])})`);
+  } else {
+    L.push("Тест не выделил одну главную тему. Это тоже результат: Егор разберёт ваши ответы и подскажет, с чего начать.");
+  }
+  return L;
+}
+var ctaText = (tgName2) => `Подробный разбор и проработку можно получить у Егора в Telegram: @${tgName2}`;
+function summaryFromSession(s) {
+  let scores = s.scores;
+  if (typeof scores === "string") scores = JSON.parse(scores);
+  return clientSummary({ scores, primary: s.primary_theme ? s.primary_theme.split(" и ") : [], second: s.second_theme || null });
+}
 
 // worker/src/util.js
 var enc = new TextEncoder();
@@ -358,11 +374,12 @@ async function verifyInitData(initData, botToken, maxAgeSec = 86400) {
 }
 
 // weight/src/index.js
-var DEFAULTS = { WT_PAGES_URL: "https://egor-la.github.io/hypno-diag/weight", WT_BOT_USERNAME: "overweight_gnm_bot" };
+var DEFAULTS = { WT_PAGES_URL: "https://egor-la.github.io/hypno-diag/weight", WT_BOT_USERNAME: "overweight_gnm_bot", THERAPIST_TG: "egor_lakhtiuk" };
 async function webhookSecret(env) {
   return env.WT_WEBHOOK_SECRET || hex(await hmac(env.WT_BOT_TOKEN, "wt-webhook")).slice(0, 48);
 }
-var NO_LINK = "Этот опросник открывается по личной ссылке. Попросите её у Егора";
+var tgHandle = (env) => String(env.THERAPIST_TG).replace(/^@/, "");
+var writeButton = (env) => ({ inline_keyboard: [[{ text: "Написать Егору", url: `https://t.me/${tgHandle(env)}` }]] });
 async function tg(env, method, body) {
   const base = env.TG_API || "https://api.telegram.org";
   try {
@@ -520,6 +537,8 @@ async function apiState(env, body) {
   return json(env, {
     ok: true,
     status: session.status,
+    summary: finished ? summaryFromSession(session) : null,
+    therapist: tgHandle(env),
     step: finished ? null : session.current_step || "start",
     answers: finished ? {} : await loadAnswers(env, session.id),
     content: finished ? null : content()
@@ -562,7 +581,11 @@ async function apiFinish(env, body) {
   ).bind(now, JSON.stringify(ev.scores), primary, ev.second, JSON.stringify(ev.notes), JSON.stringify(ev.flags), session.id).first();
   if (!upd) return json(env, { ok: true, already: true });
   await sendReport(env, env.ADMIN_CHAT_ID, client, { ...session, status: "finished", finished_at: now });
-  return json(env, { ok: true });
+  const summary = clientSummary(ev);
+  if (client.tg_user_id) {
+    await send(env, client.tg_user_id, ["Спасибо. Ответы уже у Егора.", "", ...summary, "", ctaText(tgHandle(env))].join("\n"), { reply_markup: writeButton(env) });
+  }
+  return json(env, { ok: true, summary, therapist: tgHandle(env) });
 }
 var HELP = [
   "Команды:",
@@ -643,26 +666,32 @@ ${link}`);
       return null;
   }
 }
+function tgName(from) {
+  const name = clean([from.first_name, from.last_name].filter(Boolean).join(" "), 60) || "Без имени";
+  return from.username ? `${name} (@${from.username})` : name;
+}
+async function greet(env, chatId, client) {
+  return send(env, chatId, `Здравствуйте, ${client.name.replace(/ \(@[^)]+\)$/, "")}! Нажмите кнопку, чтобы открыть опросник.`, { reply_markup: startButton(env) });
+}
 async function onStart(env, msg, payload) {
   const chatId = msg.chat.id;
   const userId = msg.from.id;
-  if (!payload) {
-    if (isAdmin(env, userId)) return send(env, chatId, "Здравствуйте, Егор!\n\n" + HELP);
-    const known = await db(env).prepare("SELECT * FROM wt_clients WHERE tg_user_id = ?").bind(userId).first();
-    if (known) return send(env, chatId, "Нажмите кнопку, чтобы открыть опросник.", { reply_markup: startButton(env) });
-    return send(env, chatId, NO_LINK);
+  const known = await db(env).prepare("SELECT * FROM wt_clients WHERE tg_user_id = ?").bind(userId).first();
+  if (known) return greet(env, chatId, known);
+  if (!payload && isAdmin(env, userId)) return send(env, chatId, "Здравствуйте, Егор!\n\n" + HELP);
+  const invited = /^[0-9a-f]{24}$/.test(payload || "") ? await db(env).prepare("SELECT * FROM wt_clients WHERE token = ?").bind(payload).first() : null;
+  if (invited && !invited.tg_user_id) {
+    const upd = await db(env).prepare("UPDATE wt_clients SET tg_user_id = ? WHERE id = ? AND tg_user_id IS NULL RETURNING id").bind(userId, invited.id).first();
+    if (upd) {
+      await send(env, env.ADMIN_CHAT_ID, `${invited.name} открыла ссылку`);
+      return greet(env, chatId, invited);
+    }
   }
-  const client = /^[0-9a-f]{24}$/.test(payload) ? await db(env).prepare("SELECT * FROM wt_clients WHERE token = ?").bind(payload).first() : null;
-  if (!client) return send(env, chatId, NO_LINK);
-  if (client.tg_user_id && String(client.tg_user_id) !== String(userId)) return send(env, chatId, NO_LINK);
-  if (!client.tg_user_id) {
-    const other = await db(env).prepare("SELECT id FROM wt_clients WHERE tg_user_id = ?").bind(userId).first();
-    if (other) return send(env, chatId, NO_LINK);
-    const upd = await db(env).prepare("UPDATE wt_clients SET tg_user_id = ? WHERE id = ? AND tg_user_id IS NULL RETURNING id").bind(userId, client.id).first();
-    if (!upd) return send(env, chatId, NO_LINK);
-    await send(env, env.ADMIN_CHAT_ID, `${client.name} открыла ссылку`);
-  }
-  return send(env, chatId, `Здравствуйте, ${client.name}! Нажмите кнопку, чтобы открыть опросник.`, { reply_markup: startButton(env) });
+  const client = { id: randomId(6), name: tgName(msg.from), token: randomId(12), created_at: Date.now() };
+  await db(env).prepare("INSERT INTO wt_clients (id, name, token, tg_user_id, created_at) VALUES (?, ?, ?, ?, ?)").bind(client.id, client.name, client.token, userId, client.created_at).run();
+  await newSession(env, client.id, 1);
+  await send(env, env.ADMIN_CHAT_ID, `Новый человек: ${client.name} открыл(а) опросник по весу`);
+  return greet(env, chatId, client);
 }
 async function onMessage(env, msg) {
   if (!msg.chat || msg.chat.type !== "private" || !msg.from) return;
@@ -681,7 +710,7 @@ async function onMessage(env, msg) {
   }
   const known = await db(env).prepare("SELECT id FROM wt_clients WHERE tg_user_id = ?").bind(msg.from.id).first();
   if (known) return send(env, chatId, "Нажмите кнопку, чтобы открыть опросник.", { reply_markup: startButton(env) });
-  return send(env, chatId, NO_LINK);
+  return send(env, chatId, "Чтобы пройти опросник по весу, нажмите /start");
 }
 async function handleWebhook(request, env) {
   if (!timingSafeEqual(request.headers.get("x-telegram-bot-api-secret-token"), await webhookSecret(env))) return new Response("forbidden", { status: 403 });

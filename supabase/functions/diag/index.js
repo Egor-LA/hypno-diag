@@ -559,7 +559,7 @@ function kindTitle(d) {
   if (d.isFirst) return "первичный";
   return d.kind === "full" ? "полный ретест" : "короткий ретест";
 }
-function clientResultsText(d) {
+function clientResultsText(d, opts = {}) {
   const L = [];
   const s = d.sub;
   if (d.kind === "full") {
@@ -574,7 +574,7 @@ function clientResultsText(d) {
       L.push("");
       L.push(`Главное беспокойство: было ${d.concern.prev}, сейчас ${d.concern.now}`);
     }
-    if (d.isFirst) {
+    if (d.isFirst && opts.invited) {
       L.push("");
       L.push("Обсудим это на встрече.");
     }
@@ -595,6 +595,10 @@ function clientResultsText(d) {
   if (clientSafetyTriggered(s.answers)) {
     L.push("");
     L.push(SAFETY_TEXT);
+  }
+  if (opts.therapist) {
+    L.push("");
+    L.push(`Подробный разбор и проработку можно получить у Егора в Telegram: @${opts.therapist}`);
   }
   return L.join("\n");
 }
@@ -796,7 +800,7 @@ async function runReminders(env, now = Date.now()) {
       }
       const lead = r.attempts === 0 ? "" : "Напоминаю. ";
       const dur = kind === "full" ? "10-15 минут" : "2-3 минуты";
-      await send(env, r.chat_id, `${lead}${r.name}, пора отметить, как вы. Займёт ${dur}.`, { reply_markup: webAppButton(env, kind, "Отметить состояние") });
+      await send(env, r.chat_id, `${lead}${shortName(r.name)}, пора отметить, как вы. Займёт ${dur}.`, { reply_markup: webAppButton(env, kind, "Отметить состояние") });
       await env.DB.prepare("UPDATE reminders SET attempts = attempts + 1, last_sent_at = ?, next_kind = ? WHERE client_id = ?").bind(now, kind, r.client_id).run();
       log.push(`sent ${r.name} ${kind} attempt ${r.attempts + 1}`);
     } else if (r.attempts >= 2 && waited >= 23.5 * H) {
@@ -830,11 +834,17 @@ function scheduleKeyboard(client) {
   };
 }
 async function sendResultsToClient(env, client, chatId, d) {
+  const therapist = String(env.THERAPIST_TG || "").replace(/^@/, "");
   const extra = {};
-  if (clientSafetyTriggered(d.sub.answers) && env.THERAPIST_TG) {
-    extra.reply_markup = { inline_keyboard: [[{ text: "Написать терапевту", url: `https://t.me/${String(env.THERAPIST_TG).replace(/^@/, "")}` }]] };
+  if (therapist) {
+    const label = clientSafetyTriggered(d.sub.answers) ? "Написать терапевту" : "Написать Егору";
+    extra.reply_markup = { inline_keyboard: [[{ text: label, url: `https://t.me/${therapist}` }]] };
   }
-  await send(env, chatId, clientResultsText(d), extra);
+  await send(env, chatId, clientResultsText(d, { invited: !!client.invite, therapist }), extra);
+}
+function tgName(from) {
+  const name = clean([from.first_name, from.last_name].filter(Boolean).join(" "), 60) || "Без имени";
+  return from.username ? `${name} (@${from.username})` : name;
 }
 async function notifyAfterSubmit(env, client, subs, idx) {
   const d = describe(subs, idx);
@@ -873,7 +883,7 @@ async function apiInit(env, body) {
   const kind = body.kind === "short" && fulls.length ? "short" : "full";
   const res = {
     ok: true,
-    name: who.client.name,
+    name: shortName(who.client.name),
     kind,
     firstTime: subs.length === 0,
     therapist: env.THERAPIST_TG || ""
@@ -990,11 +1000,12 @@ var HELP = [
   "/export Имя : файл со всей историей клиента",
   "/delete Имя : удалить все данные клиента"
 ].join("\n");
+var shortName = (n) => String(n).replace(/ \(@[^)]+\)$/, "");
 async function greetClient(env, client, chatId) {
   await send(
     env,
     chatId,
-    `Здравствуйте, ${client.name}! Это опросник состояния. Он помогает вам и вашему терапевту увидеть, как вы себя чувствуете. Займёт 10-15 минут. Нажмите кнопку, когда вам будет удобно.`,
+    `Здравствуйте, ${shortName(client.name)}! Это опросник состояния. Он помогает вам и вашему терапевту увидеть, как вы себя чувствуете. Займёт 10-15 минут. Нажмите кнопку, когда вам будет удобно.`,
     { reply_markup: webAppButton(env, "full") }
   );
 }
@@ -1010,32 +1021,35 @@ async function bindClient(env, client, chatId) {
 async function onStart(env, msg, payload) {
   const chatId = msg.chat.id;
   if (payload) {
-    let client = null;
+    let client2 = null;
     let subId = null;
     if (/^s_[0-9a-f]+$/.test(payload)) {
       subId = payload.slice(2);
       const row = await env.DB.prepare("SELECT client_id FROM submissions WHERE id = ?").bind(subId).first();
-      if (row) client = await getClient(env, row.client_id);
+      if (row) client2 = await getClient(env, row.client_id);
     } else {
-      client = await env.DB.prepare("SELECT * FROM clients WHERE invite = ?").bind(payload).first();
+      client2 = await env.DB.prepare("SELECT * FROM clients WHERE invite = ?").bind(payload).first();
     }
-    if (!client) return send(env, chatId, "Эта ссылка не работает. Попросите терапевта прислать новую.");
-    if (!await bindClient(env, client, chatId)) return send(env, chatId, "Эта ссылка уже привязана к другому чату. Попросите терапевта прислать новую.");
+    if (!client2) return send(env, chatId, "Эта ссылка не работает. Попросите терапевта прислать новую.");
+    if (!await bindClient(env, client2, chatId)) return send(env, chatId, "Эта ссылка уже привязана к другому чату. Попросите терапевта прислать новую.");
     if (subId) {
-      await send(env, chatId, `Готово, ${client.name}. Теперь результаты и напоминания будут приходить сюда.`);
+      await send(env, chatId, `Готово, ${client2.name}. Теперь результаты и напоминания будут приходить сюда.`);
       if (sees(env)) {
-        const subs = await getSubs(env, client.id);
+        const subs = await getSubs(env, client2.id);
         const i = subs.findIndex((s) => s.id === subId);
-        if (i >= 0) await sendResultsToClient(env, client, chatId, describe(subs, i));
+        if (i >= 0) await sendResultsToClient(env, client2, chatId, describe(subs, i));
       }
       return;
     }
-    return greetClient(env, client, chatId);
+    return greetClient(env, client2, chatId);
   }
   if (isAdminId(env, msg.from.id)) return send(env, chatId, "Здравствуйте, Егор!\n\n" + HELP);
   const known = await env.DB.prepare("SELECT * FROM clients WHERE chat_id = ?").bind(chatId).first();
   if (known) return greetClient(env, known, chatId);
-  return send(env, chatId, "Чтобы начать, откройте ссылку, которую прислал вам терапевт.");
+  const client = { id: randomId(6), name: tgName(msg.from), chat_id: chatId, tz: "Europe/Moscow", invite: null, schedule: "off", created_at: Date.now() };
+  await env.DB.prepare("INSERT INTO clients (id, name, contact, chat_id, tz, invite, schedule, created_at) VALUES (?, ?, NULL, ?, ?, NULL, ?, ?)").bind(client.id, client.name, chatId, client.tz, client.schedule, client.created_at).run();
+  await send(env, env.ADMIN_CHAT_ID, `Новый человек: ${client.name} открыл(а) опросник состояния`);
+  return greetClient(env, client, chatId);
 }
 async function pickClient(env, chatId, name, cmd) {
   if (!name) {
@@ -1132,7 +1146,7 @@ async function onMessage(env, msg) {
   if (isAdminId(env, msg.from.id)) return send(env, chatId, HELP);
   const known = await env.DB.prepare("SELECT * FROM clients WHERE chat_id = ?").bind(chatId).first();
   if (known) return send(env, chatId, `${known.name}, я бот для опросника и отвечать на сообщения не умею. Чтобы пройти опросник, нажмите кнопку.`, { reply_markup: webAppButton(env, "full") });
-  return send(env, chatId, "Чтобы начать, откройте ссылку, которую прислал вам терапевт.");
+  return send(env, chatId, "Чтобы пройти опросник, нажмите /start");
 }
 async function onCallback(env, cq) {
   const answer = (text) => tg(env, "answerCallbackQuery", { callback_query_id: cq.id, ...text ? { text } : {} });
@@ -1167,7 +1181,7 @@ async function onCallback(env, cq) {
         if (!n.n) return send(env, chatId, "Короткий ретест возможен только после первого полного прохождения.");
       }
       const dur = kind === "full" ? "10-15 минут" : "2-3 минуты";
-      await send(env, client.chat_id, `${client.name}, пора отметить, как вы. Займёт ${dur}.`, { reply_markup: webAppButton(env, kind, "Отметить состояние") });
+      await send(env, client.chat_id, `${shortName(client.name)}, пора отметить, как вы. Займёт ${dur}.`, { reply_markup: webAppButton(env, kind, "Отметить состояние") });
       return send(env, chatId, `Отправлено: ${client.name}, ${kindWord(kind)} ретест. Расписание не изменилось.`);
     }
     case "del": {
