@@ -78,7 +78,7 @@ async function open(id) {
 }
 const qText = (p) => p.textContent('.q');
 const tap = async (p, label) => { await p.click(`.opt:text-is("${label}")`); await sleep(120); };
-const OPT = ['Не про меня', 'Иногда', 'Часто', 'Точно про меня'];
+const OPT = ['Совсем не про меня', 'Немного про меня', 'Во многом про меня', 'Точно про меня'];
 // ответы: q12=3, q14=2, q16=3 (уточнения 12, 14, 16), остальные по схеме
 const A = {}; for (let n = 1; n <= 25; n++) A[n] = [1, 6, 11, 21].includes(n) ? 3 : [2, 7, 22].includes(n) ? 2 : [15, 17, 19].includes(n) ? 1 : 0;
 A[12] = 3; A[14] = 2; A[16] = 3;
@@ -110,7 +110,7 @@ ok((await qText(page)) === 'Что случилось и когда?', 'уточ
 // назад до вопроса 14 и меняем на «Иногда»
 const backTo = async (start) => { while (!(await qText(page)).startsWith(start)) { await page.click('#back'); await sleep(100); } };
 await backTo('В моей жизни есть человек или ситуация');
-await tap(page, 'Иногда');
+await tap(page, 'Немного про меня');
 await backTo('В моей жизни есть человек');
 ok(true, 'вернулась к 14 и сменила на «Иногда»');
 // вперёд до уточнений: 14-го быть не должно
@@ -120,7 +120,7 @@ const forwardThrough = async () => { const seen = []; for (let i = 0; i < 20; i+
 let seen = await forwardThrough();
 ok(!seen.includes('Кто это или что за ситуация?') && seen.includes('Кто это сказал и что именно?'), 'уточнение к 14 исчезло');
 await backTo('В моей жизни есть человек');
-await tap(page, 'Часто');
+await tap(page, 'Во многом про меня');
 seen = [];
 for (let i = 0; i < 20; i++) { const t = await qText(page); if (t === 'Кто это или что за ситуация?') break; await step1(); }
 ok((await page.inputValue('#t')) === 'Свекровь, когда приезжает', 'сменила обратно на «Часто»: текст на месте');

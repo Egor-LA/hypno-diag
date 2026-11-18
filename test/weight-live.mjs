@@ -4,7 +4,7 @@
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { chromium } from 'playwright';
+import { chromium, webkit } from 'playwright';
 
 const envf = Object.fromEntries(fs.readFileSync(fileURLToPath(new URL('../.prod-secrets', import.meta.url)), 'utf8').trim().split('\n').map((l) => [l.slice(0, l.indexOf('=')), l.slice(l.indexOf('=') + 1)]));
 const TOKEN = envf.WT_BOT_TOKEN;
@@ -32,7 +32,7 @@ ok((await api('/api/state', 7000099)).status === 403, 'чужой ID в мини
 ok((await fetch(W + '/api/state' + RG, { method: 'POST', body: JSON.stringify({ initData: initData(CL).replace(/hash=.{4}/, 'hash=0000') }) })).status === 401, 'подделанная подпись: 401');
 
 const stub = (id) => `window.Telegram={WebApp:{initData:${JSON.stringify(initData(id))},initDataUnsafe:{},themeParams:{},ready(){},expand(){},onEvent(){},HapticFeedback:{selectionChanged(){}},close(){}}};`;
-const browser = await chromium.launch();
+const browser = await (process.env.BROWSER === 'webkit' ? webkit : chromium).launch();
 async function open() {
   const ctx = await browser.newContext({ viewport: { width: 360, height: 740 }, isMobile: true, hasTouch: true });
   const page = await ctx.newPage();
@@ -47,7 +47,7 @@ const qText = () => page.textContent('.q');
 const tap = async (label) => { await page.click(`.opt:text-is("${label}")`); await sleep(250); };
 const step1 = async () => { if (await page.$('.opt.sel')) await page.click('.opt.sel'); else if (await page.isDisabled('#go') && await page.$('#skip')) await page.click('#skip'); else await page.click('#go'); await sleep(250); };
 const backTo = async (start) => { while (!(await qText()).startsWith(start)) { await page.click('#back'); await sleep(200); } };
-const OPT = ['Не про меня', 'Иногда', 'Часто', 'Точно про меня'];
+const OPT = ['Совсем не про меня', 'Немного про меня', 'Во многом про меня', 'Точно про меня'];
 const A = {}; for (let n = 1; n <= 25; n++) A[n] = [1, 6, 11, 21].includes(n) ? 3 : [2, 7, 22].includes(n) ? 2 : [15, 17, 19].includes(n) ? 1 : 0;
 A[12] = 3; A[14] = 2; A[16] = 3;
 
@@ -65,13 +65,13 @@ await page.click('#go'); await sleep(250);
 await page.click('#skip'); await sleep(250);
 await page.fill('#t', 'Свекровь'); await page.click('#go'); await sleep(250);
 await backTo('В моей жизни есть человек');
-await tap('Иногда');
+await tap('Немного про меня');
 await backTo('В моей жизни есть человек');
 const seen = [];
 for (let i = 0; i < 20; i++) { const t = await qText(); seen.push(t); if (t === 'Что случилось и когда?') break; await step1(); }
 ok(!seen.includes('Кто это или что за ситуация?'), '14 → «Иногда»: уточнение исчезло');
 await backTo('В моей жизни есть человек');
-await tap('Часто');
+await tap('Во многом про меня');
 for (let i = 0; i < 20; i++) { if ((await qText()) === 'Кто это или что за ситуация?') break; await step1(); }
 ok((await page.inputValue('#t')) === 'Свекровь', '14 → снова «Часто»: текст на месте');
 await page.click('#go'); await sleep(250);
