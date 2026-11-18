@@ -11,6 +11,7 @@ const TOKEN = envf.WT_BOT_TOKEN;
 const ADMIN = Number(envf.ADMIN_CHAT_ID);
 const SECRET = crypto.createHmac('sha256', TOKEN).update('wt-webhook').digest('hex').slice(0, 48);
 const W = 'https://fernvgsdytmvzrikpgqe.supabase.co/functions/v1/weight';
+const RG = '?forceFunctionRegion=eu-central-1';
 const PAGE = 'https://egor-la.github.io/hypno-diag/weight/index.html';
 const clientToken = process.argv[2];
 const CL = 7000001; // поддельный Telegram ID тестовой клиентки
@@ -21,14 +22,14 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const hmac = (k, m) => crypto.createHmac('sha256', k).update(m).digest();
 const initData = (id) => { const p = new URLSearchParams({ auth_date: String(Math.floor(Date.now() / 1000)), user: JSON.stringify({ id, first_name: 'Т' }) });
   p.set('hash', hmac(hmac('WebAppData', TOKEN), [...p.entries()].map(([k, v]) => `${k}=${v}`).sort().join('\n')).toString('hex')); return p.toString(); };
-const hook = (u, secret = SECRET) => fetch(W + '/telegram/webhook', { method: 'POST', headers: { 'content-type': 'application/json', 'x-telegram-bot-api-secret-token': secret }, body: JSON.stringify(u) }).then((r) => r.status);
+const hook = (u, secret = SECRET) => fetch(W + '/telegram/webhook' + RG, { method: 'POST', headers: { 'content-type': 'application/json', 'x-telegram-bot-api-secret-token': secret }, body: JSON.stringify(u) }).then((r) => r.status);
 const msg = (from, text) => ({ message: { message_id: 1, from: { id: from }, chat: { id: from, type: 'private' }, text } });
-const api = (path, id, body = {}) => fetch(W + path, { method: 'POST', body: JSON.stringify({ initData: initData(id), ...body }) }).then(async (r) => ({ status: r.status, ...(await r.json()) }));
+const api = (path, id, body = {}) => fetch(W + path + RG, { method: 'POST', body: JSON.stringify({ initData: initData(id), ...body }) }).then(async (r) => ({ status: r.status, ...(await r.json()) }));
 
 ok(await hook(msg(ADMIN, '/list'), 'bad') === 403, 'webhook с неверным секретом: 403');
 ok(await hook(msg(CL, '/start ' + clientToken)) === 200, 'клиентка нажала «Старт» по личной ссылке');
 ok((await api('/api/state', 7000099)).status === 403, 'чужой ID в мини-приложении: 403');
-ok((await fetch(W + '/api/state', { method: 'POST', body: JSON.stringify({ initData: initData(CL).replace(/hash=.{4}/, 'hash=0000') }) })).status === 401, 'подделанная подпись: 401');
+ok((await fetch(W + '/api/state' + RG, { method: 'POST', body: JSON.stringify({ initData: initData(CL).replace(/hash=.{4}/, 'hash=0000') }) })).status === 401, 'подделанная подпись: 401');
 
 const stub = (id) => `window.Telegram={WebApp:{initData:${JSON.stringify(initData(id))},initDataUnsafe:{},themeParams:{},ready(){},expand(){},onEvent(){},HapticFeedback:{selectionChanged(){}},close(){}}};`;
 const browser = await chromium.launch();
