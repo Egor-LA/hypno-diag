@@ -106,6 +106,7 @@ async function post(path, body) {
 }
 
 const pending = [];
+const strip = ({ sent, ...b }) => b;
 let flushing = null;
 function save(body) {
   pending.push(body);
@@ -116,7 +117,8 @@ function flush() {
   flushing = (async () => {
     while (pending.length) {
       let r;
-      try { r = await post('/api/answer', pending[0]); } catch { r = { ok: false }; }
+      pending[0].sent = true;
+      try { r = await post('/api/answer', strip(pending[0])); } catch { r = { ok: false }; }
       if (!r.ok) {
         if (r.error === 'finished') { pending.length = 0; showFinal(); break; }
         document.getElementById('err').hidden = false;
@@ -130,29 +132,34 @@ function flush() {
   })();
   return flushing;
 }
+// Приложение закрывают или сворачивают: досылаем неотправленное фоновым запросом
+function beaconAll() {
+  if (!pending.length || !navigator.sendBeacon) return;
+  for (const p of pending) navigator.sendBeacon(api + '/api/answer', JSON.stringify({ initData: tg.initData, ...strip(p) }));
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') beaconAll(); });
+window.addEventListener('pagehide', beaconAll);
 document.getElementById('errRetry').addEventListener('click', () => { document.getElementById('err').hidden = true; flush(); });
 
 // ---------- навигация ----------
-function go(step) {
+function go(step, answer) {
   cur = step;
-  save({ step });
+  save(answer ? { ...answer, step } : { step });
   render();
   window.scrollTo(0, 0);
 }
-function next() {
+// answer: { key, value, text, skipped } сохраняется вместе с переходом одним запросом
+function next(answer) {
+  if (answer) { const { key, ...a } = answer; ans[key] = a; }
   const list = screens(ans);
   const i = list.indexOf(cur);
-  if (i === list.length - 1) return finish();
-  go(list[i + 1]);
+  if (i === list.length - 1) { if (answer) save(answer); return finish(); }
+  go(list[i + 1], answer);
 }
 function back() {
   const list = screens(ans);
   const i = list.indexOf(cur);
   if (i > 0) go(list[i - 1]);
-}
-function setAnswer(key, a) {
-  ans[key] = a;
-  save({ key, ...a });
 }
 
 // ---------- экраны ----------
@@ -201,9 +208,8 @@ function renderStatement() {
   frame(`<div class="head">Насколько это про вас?</div><p class="q">${esc(s.text)}</p>
     <div class="opts">${C.options.map((o, i) => btn(`opt ${v === i ? 'sel' : ''}`, o, `data-v="${i}"`)).join('')}</div>`);
   app.querySelectorAll('.opt').forEach((b) => b.addEventListener('click', () => {
-    setAnswer(cur, { value: Number(b.dataset.v), text: null, skipped: false });
     try { tg.HapticFeedback.selectionChanged(); } catch { /* ok */ }
-    next();
+    next({ key: cur, value: Number(b.dataset.v), text: null, skipped: false });
   }));
 }
 
@@ -216,15 +222,15 @@ function renderText(key, question, orig) {
   const go = document.getElementById('go');
   const sync = () => { go.disabled = !t.value.trim(); };
   t.addEventListener('input', sync); sync();
-  go.addEventListener('click', () => { setAnswer(key, { value: null, text: t.value.trim(), skipped: false }); next(); });
-  document.getElementById('skip').addEventListener('click', () => { setAnswer(key, { value: null, text: null, skipped: true }); next(); });
+  go.addEventListener('click', () => { next({ key, value: null, text: t.value.trim(), skipped: false }); });
+  document.getElementById('skip').addEventListener('click', () => { next({ key, value: null, text: null, skipped: true }); });
 }
 
 function renderSingle(key, question, opts) {
   const v = ans[key]?.value;
   frame(`<div style="height:20px"></div><p class="q">${esc(question)}</p>
     <div class="opts">${opts.map((o) => btn(`opt ${v === o ? 'sel' : ''}`, o, `data-v="${esc(o)}"`)).join('')}</div>`);
-  app.querySelectorAll('.opt').forEach((b) => b.addEventListener('click', () => { setAnswer(key, { value: b.dataset.v, text: null, skipped: false }); next(); }));
+  app.querySelectorAll('.opt').forEach((b) => b.addEventListener('click', () => { next({ key, value: b.dataset.v, text: null, skipped: false }); }));
 }
 
 // Множественный выбор. exclusive: «Ничего из этого» снимает остальные и наоборот
@@ -252,8 +258,7 @@ function renderMulti(key, question, opts, exclusive) {
   go.addEventListener('click', () => {
     const ordered = opts.filter((o) => sel.includes(o));
     const text = other && ordered.includes('Другое') ? document.getElementById('t').value.trim() || null : null;
-    setAnswer(key, { value: ordered, text, skipped: false });
-    next();
+    next({ key, value: ordered, text, skipped: false });
   });
 }
 
@@ -267,12 +272,12 @@ function renderS41() {
   const go = document.getElementById('go');
   const sync = () => { go.disabled = !t.value.trim(); };
   t.addEventListener('input', sync); sync();
-  document.getElementById('no').addEventListener('click', () => { setAnswer('s4_1', { value: 'Нет', text: null, skipped: false }); next(); });
+  document.getElementById('no').addEventListener('click', () => { next({ key: 's4_1', value: 'Нет', text: null, skipped: false }); });
   document.getElementById('yes').addEventListener('click', () => {
     document.getElementById('yes').classList.add('sel'); document.getElementById('no').classList.remove('sel');
     document.getElementById('more').hidden = false; t.focus();
   });
-  go.addEventListener('click', () => { setAnswer('s4_1', { value: 'Да', text: t.value.trim(), skipped: false }); next(); });
+  go.addEventListener('click', () => { next({ key: 's4_1', value: 'Да', text: t.value.trim(), skipped: false }); });
 }
 
 function renderS42() {
@@ -288,12 +293,12 @@ function renderS42() {
   t.addEventListener('input', sync); sync();
   app.querySelectorAll('.opt').forEach((b) => b.addEventListener('click', () => {
     const o = C.s4_2[Number(b.dataset.i)];
-    if (o !== DEV) { setAnswer('s4_2', { value: o, text: null, skipped: false }); return next(); }
+    if (o !== DEV) return next({ key: 's4_2', value: o, text: null, skipped: false });
     app.querySelectorAll('.opt').forEach((x) => x.classList.toggle('sel', x === b));
     document.getElementById('more').hidden = false; t.focus();
   }));
-  go.addEventListener('click', () => { setAnswer('s4_2', { value: DEV, text: t.value.trim(), skipped: false }); next(); });
-  document.getElementById('skip').addEventListener('click', () => { setAnswer('s4_2', { value: DEV, text: null, skipped: true }); next(); });
+  go.addEventListener('click', () => { next({ key: 's4_2', value: DEV, text: t.value.trim(), skipped: false }); });
+  document.getElementById('skip').addEventListener('click', () => { next({ key: 's4_2', value: DEV, text: null, skipped: true }); });
 }
 
 function message(text) {

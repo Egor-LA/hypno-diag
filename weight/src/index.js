@@ -209,7 +209,7 @@ async function apiAnswer(env, body) {
     const a = normalizeAnswer(body.key, body);
     if (!a) return json(env, { ok: false, error: 'bad_value' }, 400);
     await db(env).prepare(
-      `INSERT INTO wt_answers (session_id, question_key, value, text, skipped, updated_at) VALUES (?, ?, ?::jsonb, ?, ?, ?)
+      `INSERT INTO wt_answers (session_id, question_key, value, text, skipped, updated_at) VALUES (?, ?, ?::text::jsonb, ?, ?, ?)
        ON CONFLICT (session_id, question_key) DO UPDATE SET value = excluded.value, text = excluded.text, skipped = excluded.skipped, updated_at = excluded.updated_at`,
     ).bind(session.id, body.key, a.value == null ? null : JSON.stringify(a.value), a.text, a.skipped, now).run();
   }
@@ -233,7 +233,7 @@ async function apiFinish(env, body) {
   const primary = ev.primary.length ? ev.primary.join(' и ') : null;
   // Заканчиваем только если прохождение ещё открыто (защита от двойного нажатия)
   const upd = await db(env).prepare(
-    `UPDATE wt_sessions SET status = 'finished', finished_at = ?, current_step = NULL, scores = ?::jsonb, primary_theme = ?, second_theme = ?, notes = ?::jsonb, flags = ?::jsonb
+    `UPDATE wt_sessions SET status = 'finished', finished_at = ?, current_step = NULL, scores = ?::text::jsonb, primary_theme = ?, second_theme = ?, notes = ?::text::jsonb, flags = ?::text::jsonb
      WHERE id = ? AND status = 'in_progress' RETURNING id`,
   ).bind(now, JSON.stringify(ev.scores), primary, ev.second, JSON.stringify(ev.notes), JSON.stringify(ev.flags), session.id).first();
   if (!upd) return json(env, { ok: true, already: true });
