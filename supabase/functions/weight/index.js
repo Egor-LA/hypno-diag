@@ -358,6 +358,10 @@ async function verifyInitData(initData, botToken, maxAgeSec = 86400) {
 }
 
 // weight/src/index.js
+var DEFAULTS = { WT_PAGES_URL: "https://egor-la.github.io/hypno-diag/weight", WT_BOT_USERNAME: "overweight_gnm_bot" };
+async function webhookSecret(env) {
+  return env.WT_WEBHOOK_SECRET || hex(await hmac(env.WT_BOT_TOKEN, "wt-webhook")).slice(0, 48);
+}
 var NO_LINK = "Этот опросник открывается по личной ссылке. Попросите её у Егора";
 async function tg(env, method, body) {
   const base = env.TG_API || "https://api.telegram.org";
@@ -680,7 +684,7 @@ async function onMessage(env, msg) {
   return send(env, chatId, NO_LINK);
 }
 async function handleWebhook(request, env) {
-  if (!timingSafeEqual(request.headers.get("x-telegram-bot-api-secret-token"), env.WT_WEBHOOK_SECRET)) return new Response("forbidden", { status: 403 });
+  if (!timingSafeEqual(request.headers.get("x-telegram-bot-api-secret-token"), await webhookSecret(env))) return new Response("forbidden", { status: 403 });
   let upd;
   try {
     upd = await request.json();
@@ -695,7 +699,8 @@ async function handleWebhook(request, env) {
   return new Response("ok");
 }
 var src_default = {
-  async fetch(request, env) {
+  async fetch(request, rawEnv) {
+    const env = { ...DEFAULTS, ...rawEnv };
     const url = new URL(request.url);
     const path = url.pathname.replace(/^\/(functions\/v1\/)?weight(?=\/|$)/, "") || "/";
     if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cors(env) });
